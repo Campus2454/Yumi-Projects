@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: bot/Dockerfile.production
+    ports:
+      - '30061:30061'
+    extra_hosts:
+      - 'host.docker.internal:host-gateway'
+    restart: always

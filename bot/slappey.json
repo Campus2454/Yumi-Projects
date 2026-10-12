@@ -1,0 +1,6 @@
+{
+  "name": "camming",
+  "language": "typescript",
+  "manager": "yarn",
+  "prefix": "!"
+}

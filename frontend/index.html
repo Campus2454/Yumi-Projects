@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang='en'>
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="https://assets.yumistack.net/photos/logo/yumi/logo_yumi_text2.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f13b3b" />
+    <link rel="apple-touch-icon" href="https://assets.yumistack.net/photos/logo/yumi/logo_yumi_text2.png" />
+    <title>Yumi - Discord Bot</title>
+    <meta name="keywords" content="Yumi Bot, Yumi Discord Bot, Discord Bot, Bot Yumi, Discord management bot" />
+    <meta name="description" content="Yumi Bot - The ultimate Discord bot for managing your server with various features. Get started with Yumi now!" />
+    
+    <meta property="og:url" content="https://yumistack.net/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="https://assets.yumistack.net/photos/logo/yumi/banner_yumi_02.jpg" />
+    <meta property="og:title" content="Yumi Bot - Discord Bot" />
+    <meta property="og:description" content="Yumi Bot helps you manage your Discord server with ease and efficiency. Learn more and get started with Yumi today!" />
+    
+    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <link href='https://fonts.googleapis.com/css?family=Kanit' rel='stylesheet'>
+
+    <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2965696938207123" crossorigin="anonymous"></script> -->
+
+    <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+    <!-- <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"></script> -->
+
+    <style>
+      .loading_logo {
+        height: 150px;
+        width: 150px;
+        position: relative;
+        border-radius: 50%;
+        display: flex;
+      }
+      .loading_logo img {
+        height: 100%;
+        width: 100%;
+        border-radius: 50%;
+        box-shadow: #000 0 0 10px 2px;
+      }
+
+      .loading_logo #loading-logo-spin2 {
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        top: -7px;
+        left: -7px;
+        border: 7px solid transparent;
+        /* border-top-color: #fff; */
+        border-right-color: #fff;
+        border-radius: 50%;
+        animation: loading_logo_spin 1.0s cubic-bezier(0.44, 0.19, 0.35, 0.31) infinite;
+      }
+      .loading_logo #loading-logo-spin3 {
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        top: -7px;
+        left: -7px;
+        border: 7px solid transparent;
+        border-right-color: #fff;
+        /* border-bottom-color: #fff; */
+        border-radius: 50%;
+        animation: loading_logo_spin 1.0s cubic-bezier(0.64, 0.64, 0.58, 0.92) infinite;
+      }
+
+      @keyframes loading_logo_spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes loading_logo_spin2 {
+        0% { transform: rotate(0deg); }
+        50% { transform: rotate(100deg); }
+        100% { transform: rotate(360deg); }
+      }
+      @keyframes loading_logo_spin3 {
+        0% { transform: rotate(0deg); }
+        55% { transform: rotate(260deg); }
+        100% { transform: rotate(360deg); }
+      }
+    </style>
+
+  </head>
+  
+  <body>
+    <!-- <noscript>You need to enable JavaScript to run this app.</noscript> -->
+    <!-- <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-2965696938207123" crossorigin="anonymous"></script> -->
+    <!-- <script src="https://www.google.com/recaptcha/api.js?render=6LcuUp4qAAAAAPuR5k2nQ_OlJ5KAAoBYlGDdEst8"></script> -->
+    <div style=" position: fixed; top: 0; left: 0; z-index: -100; background: #1f1f1f; height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ffff; font-family: Kanit; ">
+      <div class="loading_logo">
+        <img src="https://assets.yumistack.net/photos/logo/yumi/001.webp" alt="Logo">
+        <div id="loading-logo-spin1"></div>
+        <div id="loading-logo-spin2"></div>
+        <div id="loading-logo-spin3"></div>
+      </div>
+      <div style="font-size: 50px; font-weight: 900;">Yumi</div>
+      <div>Loading...</div>
+    </div>
+    <div id="root" class="kanit-regular" translate="yes"></div>
+    <script type="module" src="/src/index.tsx"></script>
+  </body>
+</html>

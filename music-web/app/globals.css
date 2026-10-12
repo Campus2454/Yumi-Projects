@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --radius-xl: var(--radius);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 0%; /* #000000 */
+    --foreground: 0 0% 100%; /* White */
+    --primary: 0 74% 42%; /* #b91c1c */
+    --primary-foreground: 0 0% 100%;
+    --radius: 1rem; /* Rounded xl */
+  }
+  
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  ::-webkit-scrollbar {
+    width: 7px;
+    height: 7px;
+  }
+  ::-webkit-scrollbar-track {
+    background-color: #2a2a2a;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #e16464;
+    border-radius: 10px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #ea3e3e;
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  @keyframes shake {
+    0% { transform: translateX(0); }
+    25% { transform: translateX(-10px); }
+    50% { transform: translateX(10px); }
+    75% { transform: translateX(-10px); }
+    100% { transform: translateX(0); }
+  }
+}
+
+@layer utilities {
+  .glass {
+    @apply bg-white/5 backdrop-blur-xl border border-white/10 rounded-xl;
+  }
+}

@@ -1,0 +1,10 @@
+export async function generateMetadata({ params }: { params: { slug: string } }) {
+  let title = 'Dashboard';
+  const { slug } = await params;
+
+  return { title: 'Dashboard' };
+}
+
+export default function DashboardLayout({ children, }: { children: React.ReactNode }) {
+  return <>{children}</>
+}

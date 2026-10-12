@@ -1,0 +1,58 @@
+module.exports = {
+  apps: [
+    {
+      name: "YumiStatus",
+      script: "yarn",
+      args: "auto:start",
+      exec_mode: "fork",
+      cwd: "/home/yumi/status",
+      env: { FORCE_COLOR: "1", HOME: "/root" },
+      watch: false,
+    },
+    {
+      name: "BackEnd",
+      script: "yarn",
+      args: "start",
+      exec_mode: "fork",
+      cwd: "/home/yumi/backend",
+      env: { FORCE_COLOR: "1", HOME: "/root" },
+      watch: false,
+    },
+    {
+      name: "BackEndTest",
+      script: "yarn",
+      args: "start:dev",
+      exec_mode: "fork",
+      cwd: "/home/yumi/backend-test",
+      env: { FORCE_COLOR: "1", HOME: "/root" },
+      watch: false,
+    },
+    {
+      name: "YumiMusicV1",
+      script: "yarn",
+      args: "bot:start",
+      exec_mode: "fork",
+      cwd: "/home/yumi/musicV1",
+      env: { FORCE_COLOR: "1", HOME: "/root" },
+      watch: false,
+    },
+    {
+      name: "YumiMusicMV1",
+      script: "yarn",
+      args: "bot:start:m",
+      exec_mode: "fork",
+      cwd: "/home/yumi/musicV1",
+      env: { FORCE_COLOR: "1", HOME: "/root" },
+      watch: false,
+    },
+    {
+      name: "YumiMusicV1Test",
+      script: "yarn",
+      args: "bot:dev",
+      exec_mode: "fork",
+      cwd: "/home/yumi/musicV1",
+      env: { FORCE_COLOR: "1", HOME: "/root" },
+      watch: false,
+    },
+  ]
+}

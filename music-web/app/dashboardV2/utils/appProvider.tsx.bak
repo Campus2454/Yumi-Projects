@@ -1,0 +1,18 @@
+'use client';
+import { ReactNode, useState } from 'react'
+import { Guild } from './types';
+
+export function AppProvider({ children }: {children: ReactNode}) {
+  const [guilds, setGuilds] = useState<Guild[]>();
+  const updateGuilds = (v: Guild[]) => setGuilds(v);
+  const [guild, setGuild] = useState<Guild>();
+  const updateGuild = (v: Guild) => setGuild(v);
+
+  return <>
+    <GuildsContext.Provider value={{guilds, updateGuilds}}>
+    <GuildContext.Provider value={{guild, updateGuild}}>
+    {children}
+    </GuildContext.Provider>
+    </GuildsContext.Provider>
+  </>
+}

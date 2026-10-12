@@ -1,0 +1,19 @@
+{
+  "name": "bot",
+  "packageManager": "yarn@4.11.0",
+  "type": "module",
+  "scripts": {
+    "dev": "cross-env IS_DEV=true nodemon --exec tsx src/index.ts",
+    "start": "node build/index.js",
+    "dev:m": "cross-env IS_DEV=true MODE=music nodemon --exec tsx src/index.ts",
+    "start:m": "cross-env MODE=music node build/index.js",
+    "build": "tsc -b"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "cross-env": "^10.0.0",
+    "nodemon": "^3.1.10",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}

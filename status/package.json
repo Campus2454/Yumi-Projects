@@ -1,0 +1,40 @@
+{
+  "name": "status",
+  "version": "0.0.1",
+  "type": "module",
+  "dependencies": {
+    "axios": "^1.10.0",
+    "chalk": "^5.4.1",
+    "discord.js": "^14.21.0",
+    "dotenv": "^17.0.1",
+    "express": "^5.1.0",
+    "global": "file:../global",
+    "ink": "^6.0.1",
+    "mysql2": "^3.14.1",
+    "node-cron": "^4.2.0",
+    "nodemailer": "^7.0.4",
+    "nodemon": "^3.1.10",
+    "pm2": "^6.0.8",
+    "react": "^19.1.0"
+  },
+  "scripts": {
+    "dev": "tsx ./src/index.ts",
+    "start": "",
+    "build": "tsc",
+    "_auto": "ts-node ./src/automatic.ts",
+    "auto:start": "cross-env IS_DEV=false node ./build/automatic.js",
+    "auto:dev": "cross-env IS_DEV=true tsx ./src/automatic.ts"
+  },
+  "devDependencies": {
+    "@types/express": "^5",
+    "@types/node": "^24.0.4",
+    "@types/nodemailer": "^6.4.17",
+    "@types/react": "^19.1.8",
+    "cross-env": "^10.0.0",
+    "nodemon": "^3.1.9",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  },
+  "packageManager": "yarn@4.11.0"
+}

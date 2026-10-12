@@ -1,0 +1,37 @@
+{
+  "name": "music-v1",
+  "packageManager": "yarn@4.11.0",
+  "private": true,
+  "workspaces": [
+    "bot"
+  ],
+  "dependencies": {
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.18.2",
+    "canvas": "^3.2.1",
+    "chalk": "^5.6.2",
+    "dayjs": "^1.11.18",
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.2",
+    "express": "^5.2.1",
+    "express-session": "^1.18.2",
+    "global": "../global",
+    "kazagumo": "^3.4.3",
+    "shoukaku": "^4.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.1",
+    "cross-env": "^10.0.0",
+    "nodemon": "^3.1.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  },
+  "scripts": {
+    "bot:dev": "yarn workspace bot dev",
+    "bot:start": "yarn workspace bot start",
+    "bot:dev:m": "yarn workspace bot dev:m",
+    "bot:start:m": "yarn workspace bot start:m",
+    "bot:build": "yarn workspace bot build",
+    "autoUpGlobal": "cd ../global && yarn build && cd ../musicV1/ && yarn up"
+  }
+}

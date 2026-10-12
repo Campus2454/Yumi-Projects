@@ -1,0 +1,41 @@
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache wget
+RUN corepack enable && corepack prepare yarn@4.11.0 --activate
+
+COPY global ./global
+COPY bot ./bot
+
+WORKDIR /app/bot
+
+RUN yarn install
+RUN yarn typecheck && yarn build
+
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+RUN apk add --no-cache wget
+RUN corepack enable && corepack prepare yarn@4.11.0 --activate
+
+COPY global ./global
+COPY bot ./bot
+
+WORKDIR /app/bot
+
+RUN yarn install
+
+COPY --from=builder /app/bot/build ./build
+
+ENV FORCE_COLOR=1
+ENV TERM=xterm-256color
+ENV PORT=30061
+ENV HOST=0.0.0.0
+EXPOSE 30061
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:30061 || exit 1
+
+CMD ["yarn", "start"]

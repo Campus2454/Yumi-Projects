@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "outDir": "./build",
+    "rootDir": "./src",
+    "esModuleInterop": true,
+    "strict": true,
+    "resolveJsonModule": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "jsx": "react"
+  },
+  "include": ["src"]
+}

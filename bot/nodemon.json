@@ -1,0 +1,6 @@
+{
+    "watch": ["src"],
+    "ext": "ts",
+    "ignore": ["statusChecker.ts", "temporaryClosing.ts", "src/**/*.spec.ts", "cli.tsx"],
+    "exec": "ts-node src/index.ts"
+}

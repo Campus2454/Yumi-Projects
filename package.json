@@ -1,0 +1,14 @@
+{
+  "name": "yumi",
+  "type": "module",
+  "scripts": {
+    "register": "node RegisterCommand.js",
+    "sleep": "node yumiOffline.js"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "discord.js": "^14.25.1",
+    "dotenv": "^16.4.5",
+    "dotenv-cli": "^11.0.0"
+  }
+}

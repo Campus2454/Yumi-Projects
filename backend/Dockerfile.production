@@ -1,0 +1,43 @@
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+RUN apk add --no-cache wget
+RUN corepack enable && corepack prepare yarn@4.11.0 --activate
+
+COPY global ./global
+COPY backend ./backend
+
+WORKDIR /app/backend
+
+RUN yarn install
+
+RUN yarn typecheck && yarn build
+
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+RUN apk add --no-cache wget
+RUN corepack enable && corepack prepare yarn@4.11.0 --activate
+
+COPY global ./global
+COPY backend ./backend
+
+WORKDIR /app/backend
+
+ENV NODE_ENV=production
+RUN yarn install
+
+COPY --from=builder /app/backend/dist ./dist
+
+ENV FORCE_COLOR=1
+ENV TERM=xterm-256color
+ENV PORT=3001
+ENV HOST=0.0.0.0
+EXPOSE 3001
+
+HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:3001 || exit 1
+
+CMD ["yarn", "start:prod"]

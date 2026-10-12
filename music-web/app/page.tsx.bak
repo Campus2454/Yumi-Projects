@@ -1,0 +1,76 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import Link from 'next/link';
+
+export default function LandingPage() {
+  // ตั้งค่าเริ่มต้นเป็น ... ระหว่างรอโหลดข้อมูล
+  const [stats, setStats] = useState({ users: '...', servers: '...' });
+
+  // ดึงข้อมูลจริงจาก API
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch('/api/stats');
+        const data = await res.json();
+        // แปลงตัวเลขให้มีลูกน้ำ (,)
+        setStats({ 
+          users: data.members.toLocaleString(), 
+          servers: data.guilds.toLocaleString() 
+        });
+      } catch (error) {
+        console.error("Failed to fetch stats", error);
+        setStats({ users: '-', servers: '-' }); // กรณี API ล่ม
+      }
+    };
+    fetchStats();
+  }, []);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[80vh] text-center">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="flex flex-col items-center gap-6"
+      >
+        <div className="w-32 h-32 rounded-full bg-primary flex items-center justify-center text-5xl font-bold text-white shadow-[0_0_40px_rgba(185,28,28,0.4)]">
+          Y
+        </div>
+
+        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight">
+          This is <span className="text-primary">Yumi App</span>
+        </h1>
+        
+        <p className="text-white/60 text-lg max-w-lg mt-2">
+          Your ultimate Discord music experience.
+        </p>
+
+        {/* ปุ่มตามดีไซน์ในรูป */}
+        <div className="flex flex-col items-center gap-4 mt-8">
+          <div className="flex items-center gap-4">
+            <Link 
+              href="/invite" 
+              className="px-8 py-3 bg-[#111] hover:bg-[#222] border border-white/10 text-white rounded-full font-medium transition-all"
+            >
+              เชิญบอทเข้าเซิร์ฟเวอร์
+            </Link>
+            
+            <Link 
+              href="/commands" 
+              className="px-8 py-3 bg-[#111] hover:bg-[#222] border border-white/10 text-white rounded-full font-medium transition-all"
+            >
+              ดูรายการคำสั่ง
+            </Link>
+          </div>
+
+          {/* สถิติการใช้งานจริง */}
+          <p className="text-white/60 mt-4 text-sm md:text-base">
+            ให้บริการ ผู้ใช้งาน <span className="text-white font-semibold">{stats.users}</span> คน / <span className="text-white font-semibold">{stats.servers}</span> เซิร์ฟเวอร์
+          </p>
+        </div>
+      </motion.div>
+    </div>
+  );
+}
