@@ -9,6 +9,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   allowedDevOrigins: ['148.113.174.253', '148.113.174.253:7015'],
+  transpilePackages: ['../global'],
 
   async redirects() {
     return [
