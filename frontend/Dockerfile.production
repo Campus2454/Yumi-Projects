@@ -9,13 +9,20 @@ COPY package.json yarn.lock* .yarnrc.yml ./
 COPY global ./global
 COPY frontend ./frontend
 
+RUN yarn install
+
+WORKDIR /app/global
+
+RUN yarn install
+RUN yarn build
+
 WORKDIR /app/frontend
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
 RUN yarn install
-RUN yarn build || (echo "=== BUILD FAILED LOG START ===" && yarn build --debug)
+RUN yarn build
 
 FROM node:18-alpine AS runner
 
