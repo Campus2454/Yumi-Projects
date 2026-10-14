@@ -1134,7 +1134,7 @@ export const FeatureDropdown = styled.div<{ $isShow: boolean }>`
 export const DashPanel = styled.div`
   width: 100%;
   overflow: auto;
-  animation: fadeIn .4s ease forwards;
+  /* animation: fadeIn .4s ease forwards; */
 
   & > div {
     position: relative;
@@ -1200,7 +1200,7 @@ export const DashPageServerOverview = styled.div`
         border-radius: 7px;
       }
 
-      & > h1 {
+      & > h1, & > #title {
         margin-left: 10px;
         font-weight: bold;
         font-size: 20px;
