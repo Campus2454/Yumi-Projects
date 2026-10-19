@@ -531,7 +531,7 @@ export default function PrivacyPolicyPage() {
                             <ActionButton href="https://discord.gg/brxPZB3Jzy" target="_blank" rel="noreferrer">
                                 <FaHeadset /> Discord Support Server
                             </ActionButton>
-                            <ActionButton href="https://yumistack.net/invite" target="_blank" rel="noreferrer">
+                            <ActionButton href={`${process.env.NEXT_PUBLIC_DOMAIN}/invite`} target="_blank" rel="noreferrer">
                                 <FaServer /> Invite Yumi
                             </ActionButton>
                         </ContactLinks>

@@ -10,7 +10,7 @@ export default function ServerSendPage() {
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
     const router = useRouter();
 
-    const ip = process.env.NEXT_PUBLIC_API_IP || "148.113.174.253";
+    const ip = process.env.NEXT_PUBLIC_API_IP;
 
     useEffect(() => {
         if (typeof window !== 'undefined' && window.location.hostname !== ip) {

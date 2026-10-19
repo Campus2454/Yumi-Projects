@@ -115,10 +115,10 @@ export function PremiumSkeleton() {
 export function WelcomeSkeleton() {
   return (
     <SkeletonShell>
-      <div id="title-skeleton">
-        <SkeletonBlock $width="280px" $height="40px" $radius="10px" />
-      </div>
-      <div id="line-skeleton" />
+      <div id='title'>Welcome & Goodbye</div>
+
+      <div id="line" style={{ borderBottom: '1px #fff solid', margin: '20px 50px' }} />
+
       <div style={{ marginLeft: '5%', marginRight: '5%', display: 'flex', flexDirection: 'column', gap: '30px' }}>
         {[1, 2].map((card) => (
           <div key={card} style={{ padding: '25px', borderRadius: '15px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>

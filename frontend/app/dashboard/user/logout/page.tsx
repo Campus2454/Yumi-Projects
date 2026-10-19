@@ -7,7 +7,7 @@ import { Spinner_ring } from "@/src/components/Spinner";
 export default function UserLogoutPage() {
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
     const [logging_out, setLogging_out] = useState(false);
-    const hostname = process.env.NEXT_PUBLIC_HOSTNAME || "yumistack.net";
+    const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
 
     const logout = async () => {
         setLogging_out(true);

@@ -6,31 +6,30 @@ const CONFIG: AxiosRequestConfig = {
   withCredentials: true,
 };
 
-export const getAuthStatus = () => axios.get<AuthStatus>('https://api.yumistack.net/auth/status', CONFIG);
-// export const getAuthStatusLocalhost = () => axios.get<AuthStatus>('http://148.113.174.253:3001/auth/status', CONFIG);
-export const getAuthStatusLocalhost = () => axios.get<AuthStatus>('http://localhost:3001/auth/status', CONFIG);
+export const getAuthStatus = () => axios.get<AuthStatus>(`${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/status`, CONFIG);
+export const getAuthStatusLocalhost = () => axios.get<AuthStatus>(`${process.env.NEXT_PUBLIC_API_IP_URL}/auth/status`, CONFIG);
 
-export const postAuthLogout = () => axios.post('https://api.yumistack.net/auth/logout', {}, CONFIG);
-// export const postAuthLogoutLocalhost = () => axios.post('http://148.113.174.253:3001/auth/v2/logout', {}, CONFIG);
-export const postAuthLogoutLocalhost = () => axios.post('http://localhost:3001/auth/v2/logout', {}, CONFIG);
+export const postAuthLogout = () => axios.post(`${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/logout`, {}, CONFIG);
+export const postAuthLogoutLocalhost = () => axios.post(`${process.env.NEXT_PUBLIC_API_IP_URL}/auth/v2/logout`, {}, CONFIG);
 
-export const getMutualGuilds = () => axios.get<PartialGuild[]>('https://api.yumistack.net/discord/user/guilds', CONFIG);
-// export const getMutualGuildsLocalhost = () => axios.get<PartialGuild[]>('http://148.113.174.253:3001/discord/user/guilds', CONFIG);
-export const getMutualGuildsLocalhost = () => axios.get<PartialGuild[]>('http://localhost:3001/discord/user/guilds', CONFIG);
+export const getMutualGuilds = () => axios.get<PartialGuild[]>(`${process.env.NEXT_PUBLIC_API_DOMAIN}/discord/user/guilds`, CONFIG);
+export const getMutualGuildsLocalhost = () => axios.get<PartialGuild[]>(`${process.env.NEXT_PUBLIC_API_IP_URL}/discord/user/guilds`, CONFIG);
 
 export const checkToken = ( id: string, discordId: string, accessToken: string, refreshToken: string ) =>
 axios.post<{ statusCode: string, message: string, error: string | undefined }>(
-  'https://api.yumistack.net/auth/checkToken',
+  `${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/checkToken`,
   { id, discordId, accessToken, refreshToken },
   CONFIG
 );
 export const checkTokenLocalhost = ( id: string, discordId: string, accessToken: string, refreshToken: string ) =>
 axios.post<{ statusCode: string, message: string, error: string | undefined }>(
-  // 'http://148.113.174.253:3001/auth/checkToken',
-  'http://localhost:3001/auth/checkToken',
+  `${process.env.NEXT_PUBLIC_API_IP_URL}/auth/checkToken`,
   { id, discordId, accessToken, refreshToken },
   CONFIG
 );
 
-export const getBotCommands = () => axios.post<Commands>('https://api.yumistack.net/bot/commands', CONFIG);
-export const getGuildChannel = (guildId: string) => axios.post< | APIGuildChannel<ChannelType.GuildText> | APIGuildChannel<ChannelType.GuildVoice> | APIGuildChannel<ChannelType.GuildCategory> | APIGuildChannel<ChannelType.GuildAnnouncement> | APIGuildChannel<ChannelType.GuildForum> | APIGuildChannel<ChannelType.GuildStageVoice>[]>(`https://api.yumistack.net/guilds/${guildId}/channels`, CONFIG);
+export const getBotCommands = () => axios.post<Commands>(`${process.env.NEXT_PUBLIC_API_DOMAIN}/bot/commands`, CONFIG);
+export const getBotCommandsLocalhost = () => axios.post<Commands>(`${process.env.NEXT_PUBLIC_API_IP_URL}/bot/commands`, CONFIG);
+
+export const getGuildChannel = (guildId: string) => axios.post< | APIGuildChannel<ChannelType.GuildText> | APIGuildChannel<ChannelType.GuildVoice> | APIGuildChannel<ChannelType.GuildCategory> | APIGuildChannel<ChannelType.GuildAnnouncement> | APIGuildChannel<ChannelType.GuildForum> | APIGuildChannel<ChannelType.GuildStageVoice>[]>(`${process.env.NEXT_PUBLIC_API_DOMAIN}/guilds/${guildId}/channels`, CONFIG);
+export const getGuildChannelLocalhost = (guildId: string) => axios.post< | APIGuildChannel<ChannelType.GuildText> | APIGuildChannel<ChannelType.GuildVoice> | APIGuildChannel<ChannelType.GuildCategory> | APIGuildChannel<ChannelType.GuildAnnouncement> | APIGuildChannel<ChannelType.GuildForum> | APIGuildChannel<ChannelType.GuildStageVoice>[]>(`${process.env.NEXT_PUBLIC_API_IP_URL}/guilds/${guildId}/channels`, CONFIG);

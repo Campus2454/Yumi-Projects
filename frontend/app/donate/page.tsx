@@ -15,7 +15,7 @@ export default function DonatePage() {
             
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', }}>
                         <div><span style={{ color: '#e57676', }}>Note:</span> You will not receive any additional privileges for donating to us.</div>
-                        <img src="https://assets.yumistack.net/photos/qr_promptpay.webp" loading="lazy" style={{ borderRadius: 10, width: '50%', }} />
+                        <img src={`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/qr_promptpay.webp`} loading="lazy" style={{ borderRadius: 10, width: '50%', }} />
                     </div>
                 </div>
             </div>

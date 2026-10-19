@@ -23,8 +23,8 @@ export default function HomePage() {
     const [part2selected, setPart2Selected] = useState<number>(0);
     const [mobileMode, setMobileMode] = useState<boolean>();
 
-    const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || 'https://api.yumistack.net';
-    const apiIp = process.env.NEXT_PUBLIC_API_IP || 'http://148.113.174.253:3001';
+    const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN;
+    const apiIp = process.env.NEXT_PUBLIC_API_IP_URL;
 
     const checkMobileMode = () => {
         setMobileMode(window.innerWidth < 1000);
@@ -68,7 +68,7 @@ export default function HomePage() {
         // });
 
         const DevData = () => {
-            if(window.location.hostname == 'yumistack.net'){
+            if(window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME){
                 Promise.all([
                     axios.get(`${apiDomain}/discord/user/879724821662015499`),
                     axios.get(`${apiDomain}/discord/user/612581588370325529`),
@@ -79,7 +79,7 @@ export default function HomePage() {
                 }).catch((error) => {
                     console.error("Error fetching data:", error);
                 })
-            }else if(window.location.hostname != 'yumistack.net'){
+            }else if(window.location.hostname != process.env.NEXT_PUBLIC_HOSTNAME){
                 Promise.all([
                     axios.get(`${apiIp}/discord/user/879724821662015499`),
                     axios.get(`${apiIp}/discord/user/612581588370325529`),
@@ -94,7 +94,7 @@ export default function HomePage() {
         };DevData();const intervalDevData = setInterval(DevData, 60_000);clearInterval(intervalDevData);
 
         async function statistics() {
-            if(window.location.hostname == 'yumistack.net'){
+            if(window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME){
                 const res = await fetch(`${apiDomain}/discord/statistics`);
                 if(res.ok){
                     const json: {guilds: string, members: string} = await res.json();
@@ -213,7 +213,7 @@ export default function HomePage() {
                     </div>
                 </div>
                 <img
-                    src="https://assets.yumistack.net/photos/logo/yumi/001.webp"
+                    src={`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/logo/yumi/001.webp`}
                     alt="Yumi Icon"
                     style={{ height: 300, borderRadius: '50%' }}
                 />
@@ -290,7 +290,7 @@ export default function HomePage() {
                                     </div>
                                     {user.activities?.[0] ? user.activities?.[0].type == 0 ? (
                                         <div style={{ fontSize: 15, backgroundColor: "#000000bf", borderRadius: "0 12px 12px 0", padding: "5px 15px 5px 10px", margin: "0 0 10px 0", flexDirection: "row", alignItems: "flex-end" }}>
-                                            <img src="https://assets.yumistack.net/photos/icons/gaming-pad.webp" style={{ height: 20, marginRight: 5 }} />
+                                            <img src={`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/icons/gaming-pad.webp`} style={{ height: 20, marginRight: 5 }} />
                                             {`${user.activities[0].name}`}
                                             <span style={{ color: '#b0b0b0', fontSize: '85%', marginLeft: '5px' }}>
                                                 {elapsedTimes[index] || calculateTimeElapsed(user.activities[0].timestamps?.start)}
@@ -315,11 +315,11 @@ export default function HomePage() {
                 <div className="fade-up" id="status" style={{ display: "flex", position: part2selected === 2 ? "static" : "fixed", flexDirection: "column", flexWrap: "wrap", justifyContent: "flex-start", alignContent: "center", alignItems: "flex-start", width: "100%", }}>
                     {/* <div style={{ width: "99vw", display: "flex", justifyContent: "center", }}>
                         <div style={{ width: "90%", }}>
-                            <a href="https://status.yumistack.net/" target="_blank" style={{ color: "#fff", textDecoration: 0, background: "rgba(199, 0, 0, 0.7)", borderRadius: "10px", padding: 10, cursor: "pointer", }}>open</a>
+                            <a href={`${process.env.NEXT_PUBLIC_STATUS_DOMAIN}/`} target="_blank" style={{ color: "#fff", textDecoration: 0, background: "rgba(199, 0, 0, 0.7)", borderRadius: "10px", padding: 10, cursor: "pointer", }}>open</a>
                         </div>
                     </div>
                     <div style={{ width: "99vw", display: "flex", justifyContent: "center", }}>
-                        <iframe id="status_iframe" src="https://status.yumistack.net/"  width="90%" height="500px" frameBorder="0" sandbox="allow-scripts" style={{ borderRadius: "10px", boxShadow: "black 4px 7px 20px 0px", }}></iframe>
+                        <iframe id="status_iframe" src={`${process.env.NEXT_PUBLIC_STATUS_DOMAIN}/`}  width="90%" height="500px" frameBorder="0" sandbox="allow-scripts" style={{ borderRadius: "10px", boxShadow: "black 4px 7px 20px 0px", }}></iframe>
                     </div> */}
                     <a href="https://stats.uptimerobot.com/mj7kJjCtUx" target="_blank" style={{ color: "#fff", textDecoration: 0, background: "rgba(199, 0, 0, 0.7)", borderRadius: "10px", padding: 10, cursor: "pointer", }}>go to status page</a>
                 </div>
@@ -329,7 +329,7 @@ export default function HomePage() {
         {/* end */}
         <div id="end">{mobileMode ? <div></div> : (
             <div id='end-footer' style={{ position: 'absolute', width: '100%', display: "flex", justifyContent: "center", flexDirection: 'column', alignItems: 'center', }}>
-                <img style={{ position: 'relative', zIndex: 5, maskImage: 'linear-gradient(to top, rgb(0 0 0), rgb(0 0 0), rgb(0 0 0 / 75%), rgb(0 0 0 / 25%), rgb(255 255 255 / 0%))' }} src="https://assets.yumistack.net/photos/logo/yumi/banner_yumi_02.jpg"/>
+                <img style={{ position: 'relative', zIndex: 5, maskImage: 'linear-gradient(to top, rgb(0 0 0), rgb(0 0 0), rgb(0 0 0 / 75%), rgb(0 0 0 / 25%), rgb(255 255 255 / 0%))' }} src={`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/logo/yumi/banner_yumi_02.jpg`}/>
                 
                 <div style={{ position: 'absolute', display: "flex", alignItems: "center", justifyContent: "space-between", width: "85%", bottom: 20, zIndex: 10, color: '#ffffff', textShadow: '0px 0px 10px #000000', boxShadow: '0 0 20px 2px #000', borderRadius: '10px', padding: '5px 20px', }}>
                     <div>

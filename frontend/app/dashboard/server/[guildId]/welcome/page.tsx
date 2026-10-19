@@ -11,6 +11,7 @@ import MessagePreview from "@/src/components/MessagePreview";
 import { TbCrown, TbPlus } from "react-icons/tb";
 import { PulseLoader } from "react-spinners";
 import { saveGuildConfig } from "../../saveGuildConfig";
+import { WelcomeSkeleton } from "@/src/components/DashboardSkeleton";
 
 export default function ServerWelcomePage() {
     const { guild, updateGuild } = useContext(GuildContext);
@@ -49,7 +50,7 @@ export default function ServerWelcomePage() {
         };
     }, [changePopup]);
 
-    if (!guild) return null;
+    if (!guild) return <WelcomeSkeleton />;
 
     type messageChangeType = 'wel' | 'good' | 'send';
     const handleMessageChange = (

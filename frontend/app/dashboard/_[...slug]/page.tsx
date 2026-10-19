@@ -53,10 +53,10 @@ function DashboardPageContent() {
     const [changePanelLoading, setChangePanelLoading] = useState(false);
     const notPublishedPath = ['/dashboard/server/'+`${guild?.id || '0'}`+'/send'];
     
-    const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || "https://api.yumistack.net";
-    const hostname = process.env.NEXT_PUBLIC_HOSTNAME || "yumistack.net";
-    const apiIp = process.env.NEXT_PUBLIC_API_IP || "http://148.113.174.253:3001";
-    const ip = process.env.NEXT_PUBLIC_API_IP || "148.113.174.253";
+    const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN;
+    const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
+    const apiIp = process.env.NEXT_PUBLIC_API_IP_URL;
+    const ip = process.env.NEXT_PUBLIC_API_IP;
 
     const fetchGuilds = useFetchGuilds();
     const checkData = () => {

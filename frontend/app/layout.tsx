@@ -14,13 +14,13 @@ export const metadata: Metadata = {
     type: 'website',
     title: 'Yumi Bot - Discord Bot',
     description: 'Yumi Bot helps you manage your Discord server with ease and efficiency. Learn more and get started with Yumi today!',
-    images: ['https://assets.yumistack.net/photos/logo/yumi/banner_yumi_02.jpg'],
+    images: [`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/logo/yumi/banner_yumi_02.jpg`],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Yumi Bot - Discord Bot',
     description: 'Yumi Bot helps you manage your Discord server with ease and efficiency. Learn more and get started with Yumi today!',
-    images: ['https://assets.yumistack.net/photos/logo/yumi/banner_yumi_02.jpg'],
+    images: [`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/logo/yumi/banner_yumi_02.jpg`],
   },
 };
 
@@ -28,7 +28,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <head>
-        <link rel="icon" href="https://assets.yumistack.net/photos/logo/yumi/logo_yumi_text2.png" />
+        <link rel="icon" href={`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/logo/yumi/logo_yumi_text2.png`} />
         <link href='https://fonts.googleapis.com/css?family=Kanit' rel='stylesheet' />
       </head>
       <body>

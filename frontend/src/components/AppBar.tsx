@@ -192,7 +192,7 @@ export const AppBar = () => {
                 <Link href="/" style={{ color: "white", textDecoration: "none", width: 150, fontSize: 20, display: "flex", alignItems: "center", wordBreak: 'normal', }}>
                     {/* <img src="https://assets.yumistack.net/photos/logo/yumi/001.webp" alt="logo" width={40} style={{ borderRadius: 5, marginRight: 15, }} />
                     <span>YUMI</span> */}
-                    <img src="https://assets.yumistack.net/photos/logo/yumi/logo_yumi_text2.png" alt="YUMI" width={40} style={{ width: 80 }} />
+                    <img src={`${process.env.NEXT_PUBLIC_ASSETS_DOMAIN}/photos/logo/yumi/logo_yumi_text2.png`} alt="YUMI" width={40} style={{ width: 80 }} />
                 </Link>
 
                 {/* <div className={`topBarShortCutLink ${menuActive ? 'topBarShortCutLinkHamburger mobile-active' : ''}`} style={{ width: "40%", justifyContent: "space-between", animation: menuActive ? 'mobile-active-show 0.5s ease-out;' : 'mobile-active-hide 0.5s ease-out;', }}>
@@ -242,9 +242,9 @@ export const AppBar = () => {
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', }}>
-                            <Link href={`/verify?redirect=${typeof window !== 'undefined' && window.location.hostname == 'yumistack.net' 
-                                    ? `${process.env.NEXT_PUBLIC_API_DOMAIN || 'https://api.yumistack.net'}/auth/login` 
-                                    : `${process.env.NEXT_PUBLIC_API_IP || 'http://148.113.174.253:3001'}/auth/v2/login`
+                            <Link href={`/verify?redirect=${typeof window !== 'undefined' && window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME 
+                                    ? `${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/login` 
+                                    : `${process.env.NEXT_PUBLIC_API_IP_URL}/auth/v2/login`
                             }`} style={{ display: "flex", justifyContent: "center", alignItems: "center", cursor: "pointer", backgroundColor: isAdminPage ? '#db5757' : "#5973d4", width: 100, height: 40, borderRadius: 5, }}>
                                 Login
                             </Link>

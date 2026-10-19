@@ -1,9 +1,9 @@
 import axios from "axios";
 import { GuildConfig } from "@/src/utils/types";
 
-const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN || "https://api.yumistack.net";
-const hostname = process.env.NEXT_PUBLIC_HOSTNAME || "yumistack.net";
-const apiIp = process.env.NEXT_PUBLIC_API_IP || "http://148.113.174.253:3001";
+const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN;
+const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
+const apiIp = process.env.NEXT_PUBLIC_API_IP_URL;
 
 export const saveGuildConfig = async (config: GuildConfig) => {
     try {

@@ -1133,7 +1133,8 @@ export const FeatureDropdown = styled.div<{ $isShow: boolean }>`
 
 export const DashPanel = styled.div`
   width: 100%;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   /* animation: fadeIn .4s ease forwards; */
 
   & > div {
@@ -1659,6 +1660,7 @@ export const DashPageServerFunctionWelcomeGoodBye = styled.div<{ $isEnabled: boo
   width: 100%;
   display: flex;
   justify-content: center;
+  min-height: 100px;
 
   & > div {
     display: flex;
@@ -1668,7 +1670,11 @@ export const DashPageServerFunctionWelcomeGoodBye = styled.div<{ $isEnabled: boo
     border-radius: 10px;
     overflow: hidden;
     transition: all 0.5s ease-in-out;
-    height: ${({ $isEnabled }) => $isEnabled[0] ? '100%' : '100px'};
+    /* height: ${({ $isEnabled }) => $isEnabled[0] ? 'max-content' : '100px'}; */
+    max-height: max-content;
+    background-color: #a327274e;
+    box-shadow: 0px 0px 20px 0px #0000008f;
+    transition: all 0.5s ease-in-out;
 
     & > #title {
       display: flex;
@@ -1676,7 +1682,8 @@ export const DashPageServerFunctionWelcomeGoodBye = styled.div<{ $isEnabled: boo
       z-index: 2;
       justify-content: space-between;
       transform: none;
-      background-color: #a32727;
+      min-height: 100px;
+      background: linear-gradient(135deg, #703838, #5c2b2b);
       box-shadow: 0px 0px 20px 0px #0000008f;
       border-radius: 10px;
       padding: 30px 30px;
@@ -1724,10 +1731,11 @@ export const DashPageServerFunctionWelcomeGoodBye = styled.div<{ $isEnabled: boo
 
     & > div {
       transition: all 0.5s ease-in-out;
-      background-color: #a3272766;
       border-radius: 10px;
-      padding: 15px 30px;
-      transform: ${({ $isEnabled }) => $isEnabled[0] ? 'translateY(-20px)' : 'translateY(-110%)'};
+      padding: ${({ $isEnabled }) => $isEnabled[0] ? '15px 30px' : '0px 30px'};
+      max-height: ${({ $isEnabled }) => $isEnabled[0] ? '100%' : '0px'};
+      overflow: hidden;
+      /* transform: ${({ $isEnabled }) => $isEnabled[0] ? 'translateY(0px)' : 'translateY(-100%)'}; */
 
       & > #line {
         border-bottom: 2px #ff9999 solid;

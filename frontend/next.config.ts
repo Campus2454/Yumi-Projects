@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next';
 
+const devHost = process.env.DEV_HOST ?? "";
+
 const nextConfig: NextConfig = {
   /* config options here */
   compiler: {
@@ -8,7 +10,7 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  allowedDevOrigins: ['148.113.174.253', '148.113.174.253:7015'],
+  allowedDevOrigins: [devHost, `${devHost}:7015`],
   transpilePackages: ['global'],
 
   async redirects() {

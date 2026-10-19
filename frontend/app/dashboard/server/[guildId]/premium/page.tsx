@@ -9,7 +9,7 @@ export default function ServerPremiumPage() {
     const { guild } = useContext(GuildContext);
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
     const router = useRouter();
-    const ip = process.env.NEXT_PUBLIC_API_IP || "148.113.174.253";
+    const ip = process.env.NEXT_PUBLIC_API_IP;
     const check_mark = <h3 style={{ color: '#86ffa3', fontWeight: 900, fontSize: 'larger' }}>✔</h3>;
     const wrong_mark = <h3 style={{ color: '#ff4141', fontWeight: 900, fontSize: 'larger' }}>✘</h3>;
 

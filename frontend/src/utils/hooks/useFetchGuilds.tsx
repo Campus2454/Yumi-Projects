@@ -5,7 +5,7 @@ import { MapGuildsContext } from "../contexts/Contexts";
 
 export function useFetchGuilds() {
     const { guilds, loadingGuilds, errorGuilds, updateGuilds, updateLoadingGuilds, updateErrorGuilds } = useContext(MapGuildsContext);
-    const hostname = process.env.NEXT_PUBLIC_HOSTNAME || "yumistack.net";
+    const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
 
     const fetchGuilds = () => {
         updateLoadingGuilds(true);

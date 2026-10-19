@@ -6,7 +6,7 @@ export function useFetchUser() {
     const [user, setUser] = useState<AuthStatus>();
     const [errorUser, setError] = useState('');
     const [loadingUser, setLoading] = useState(false);
-    const hostname = process.env.NEXT_PUBLIC_HOSTNAME || "yumistack.net";
+    const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
     const hasFetched = useRef(false);
     const fetchUser = async () => {
         setLoading(true);

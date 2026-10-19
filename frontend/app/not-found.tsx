@@ -3,7 +3,7 @@
 import { BackgroundFixed, NotFoundImg, NotFoundText } from "../src/utils/styles";
 import { usePathname } from "next/navigation";
 
-const domain = process.env.NEXT_PUBLIC_HOSTNAME || 'yumistack.net';
+const domain = process.env.NEXT_PUBLIC_HOSTNAME;
 
 export default function NotFound() {
     const pathname = usePathname();
