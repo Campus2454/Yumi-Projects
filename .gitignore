@@ -29,5 +29,7 @@ build/
 
 .stfolder
 .stignore
+.superpowers
+docs/
 
 musicV1/sujv2
