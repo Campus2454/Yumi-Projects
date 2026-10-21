@@ -63,7 +63,7 @@ export default function UserLayoutClient({ children }: { children: React.ReactNo
                         height: 'calc(100vh - 60px)',
                         overflow: 'hidden',
                         backgroundColor: 'rgba(0, 0, 0, 0.5)',
-                        zIndex: showLoginPopup ? 1000 : -1000,
+                        zIndex: showLoginPopup ? 50 : -999,
                         justifyContent: 'center',
                         alignItems: 'center',
                         backdropFilter: 'blur(20px) grayscale(80%)',

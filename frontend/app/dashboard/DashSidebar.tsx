@@ -86,8 +86,9 @@ export default function DashSidebar() {
           prev.map((item, i) => (i === index ? !item : item))
       );
   };
-  const navigateDashPage = (path: string | undefined) => {
+  const navigateDashPage = (e: React.MouseEvent | React.FocusEvent, path: string | undefined) => {
       if (changePopup) {
+          e.preventDefault();
           const ePage = document.getElementById('page');
           const ePopup = document.getElementById('changePopup');
           if (ePage && ePopup) {
@@ -105,8 +106,6 @@ export default function DashSidebar() {
                   ePage.style.animation = '';
               }, 500);
           };
-      } else if (path) {
-          router.push(path);
       };
   };
   const updateDataText = () => {
@@ -250,13 +249,13 @@ export default function DashSidebar() {
                         <div id="sub-menu">
                           <div>
                             {category.items.map((item) => (
-                              <div key={item.id} id={item.id} onClick={() => { setMenuActivehover(false); navigateDashPage(item.path); }} >
+                              <Link key={item.id} href={item.path} id={item.id} onClick={e => { setMenuActivehover(false); navigateDashPage(e, item.path); }} >
                                 {item.icon}
                                 {item.label}
                                 {item.tags?.map((tag) => (
                                   <div key={tag} data-tag={tag} />
                                 ))}
-                              </div>
+                              </Link>
                             ))}
                           </div>
                         </div>
