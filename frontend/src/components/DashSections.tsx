@@ -4,7 +4,7 @@ import Link from 'next/link';
 import styled, { css } from 'styled-components';
 import { FaHashtag, FaUsers, FaServer, FaCalendarAlt, FaDiscord } from 'react-icons/fa';
 import { FaShield } from 'react-icons/fa6';
-import { TbCrown, TbCopy, TbCheck, TbArrowRight, TbSettings, TbPlus, TbDiamond, TbExternalLink, TbLanguage, TbUser, TbPalette, TbPhoto, TbRefresh } from 'react-icons/tb';
+import { TbCrown, TbCopy, TbCheck, TbArrowRight, TbSettings, TbPlus, TbDiamond, TbExternalLink, TbLanguage, TbUser, TbPalette, TbPhoto, TbRefresh, TbArrowDown } from 'react-icons/tb';
 import { BsStars } from 'react-icons/bs';
 import { SkeletonBlock } from './DashboardSkeleton';
 import {
@@ -18,6 +18,8 @@ import {
 import { PartialGuild, User, localeLabels } from '../utils/types';
 import { getAvatarURL, getIconURL } from '../utils/getURL';
 import { useGuildList } from '../utils/hooks/useGuildData';
+
+const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
 // Shared by every dashboard page and its loading state.
 export function PageHeader({ title }: { title: string }) {
@@ -779,8 +781,8 @@ function Details({ profile }: { profile?: User }) {
 }
 
 const ACTIONS = [
-  { href: '/dashboard', label: 'Manage Servers', desc: 'Configure bot in your servers', color: '#f87171', bg: 'rgba(239, 68, 68, 0.15)', glow: '#ef4444', icon: <FaServer />, arrow: <TbArrowRight /> },
-  { href: '/dashboard/invite', label: 'Add Bot to Server', desc: 'Invite Yumi to Discord', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', glow: '#38bdf8', icon: <TbPlus />, arrow: <TbExternalLink /> },
+  { href: '/dashboard/user/overview#managed-servers', label: 'Manage Servers', desc: 'Configure bot in your servers', color: '#f87171', bg: 'rgba(239, 68, 68, 0.15)', glow: '#ef4444', icon: <FaServer />, arrow: <TbArrowDown /> },
+  { href: `https://discord.com/oauth2/authorize?client_id=1210178730836893719&scope=bot+applications.commands&response_type=code&redirect_uri=${origin}/dashboard/invite_fallback`, label: 'Add Bot to Server', desc: 'Invite Yumi to Discord', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', glow: '#38bdf8', icon: <TbPlus />, arrow: <TbExternalLink /> },
   { href: '/dashboard/user/membership', label: 'Membership Plans', desc: 'Special perks & features', color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.15)', glow: '#f59e0b', icon: <TbDiamond />, arrow: <TbArrowRight /> },
   { href: '/dashboard/user/premium', label: 'Manage Premium', desc: 'All premium subscription status', color: '#f472b6', bg: 'rgba(236, 72, 153, 0.15)', glow: '#ec4899', icon: <BsStars />, arrow: <TbArrowRight /> },
 ];
@@ -813,7 +815,7 @@ function ManagedServers({ guilds, loading }: { guilds?: PartialGuild[]; loading:
   const preview = guilds?.slice(0, SERVER_PREVIEW_LIMIT) || [];
   const { refreshGuilds } = useGuildList();
   return (
-    <div>
+    <div id="managed-servers">
       <SectionHeader>
         <SectionTitle><FaServer style={{ color: '#ec5b5b' }} /> Managed Servers</SectionTitle>
         <div onClick={() => { refreshGuilds(); }} style={{ color: '#ff8484', fontSize: '0.88rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500, cursor: 'pointer' }}>
