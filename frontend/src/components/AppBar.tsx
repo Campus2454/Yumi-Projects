@@ -78,8 +78,12 @@ export const AppBar = () => {
                 updateLoadingUser(false);
                 console.error(`UserError: ${err}`);
             };
-        }else if(!loadingUser){
-            updateUserError('User not found');
+        // }else if(!loadingUser){
+        //     updateUserError('User not found');
+        //     updateLoadingUser(false);
+        };
+        if (errorUser && !loadingUser){
+            updateUserError(errorUser);
             updateLoadingUser(false);
         };
         

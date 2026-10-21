@@ -15,6 +15,8 @@ import { PulseLoader } from "react-spinners";
 import { getAvatarURL } from "../../src/utils/getURL";
 import { TbRefresh } from "react-icons/tb";
 import Link from 'next/link';
+import { Spinner_ring } from '@/src/components/Spinner';
+import { FullLayoutSkeleton } from '@/src/components/DashboardSkeleton';
 // import { wait } from "@testing-library/user-event/dist/utils";
 
 function MenuPageContent() {
@@ -63,15 +65,6 @@ function MenuPageContent() {
             return () => clearTimeout(timeShowPopupLoadingError);
         }else if(showPopupLoadingError){setShowPopupLoadingError(false)}
     }, [loadingGuilds]);
-
-    // useEffect(() => {
-    //     // console.log(errorGuildsCount);
-    //     if(errorGuildsCount > 1)window.location.reload();
-    // }, [errorGuildsCount]);
-    
-    //   const handleClick = (guild: PartialGuild) => {
-    //     history.push(`/guilds/${guildId}`);
-    //   };
 
     if(loadingUser || (!user && !userError)){
     return (
@@ -250,9 +243,11 @@ function MenuPageContent() {
 }
 
 export default function MenuPage() {
+
     return (
         <Suspense fallback={<div>Loading dashboard...</div>}>
-            <MenuPageContent />
+            {/* <MenuPageContent /> */}
+            <FullLayoutSkeleton />
         </Suspense>
     );
 }

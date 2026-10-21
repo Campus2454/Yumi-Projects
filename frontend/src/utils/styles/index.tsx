@@ -746,8 +746,8 @@ export const DashSidebar = styled.div`
                   margin-bottom: 5px;
 
                   & > input {
-                    position: fixed;
                     height: 40px;
+                    width: 100%;
                     padding: 0 20px;
                     border-radius: 10px;
                     background: #b45151;

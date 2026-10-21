@@ -2,8 +2,7 @@
 import { useContext } from "react";
 import { UserContext } from "@/src/utils/contexts/Contexts";
 import { useGuildList } from "@/src/utils/hooks/useGuildData";
-import { PageHeader } from "@/src/components/DashSections";
-import { UserOverview, UserOverviewSkeleton } from "@/src/components/UserOverview";
+import { PageHeader, UserOverview } from "@/src/components/DashSections";
 
 export default function UserOverviewPage() {
   const { user: profile } = useContext(UserContext);
@@ -12,11 +11,7 @@ export default function UserOverviewPage() {
   return (
     <div>
       {/* <PageHeader title="User Info" /> */}
-      {profile ? (
-        <UserOverview profile={profile} guilds={guilds} loadingGuilds={loadingGuilds} />
-      ) : (
-        <UserOverviewSkeleton />
-      )}
+      <UserOverview profile={profile} guilds={guilds} loadingGuilds={loadingGuilds} />
     </div>
   );
 }

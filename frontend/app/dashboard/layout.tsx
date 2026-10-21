@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
 import DashSidebar from './DashSidebar';
+import UserLayoutClient from './user/UserLayoutClient';
 
 export const metadata: Metadata = {
   title: 'Dashboard',
