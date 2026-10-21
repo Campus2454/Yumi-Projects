@@ -11,7 +11,7 @@ export default function UserOverviewPage() {
 
   return (
     <div>
-      <PageHeader title="User Info" />
+      {/* <PageHeader title="User Info" /> */}
       {profile ? (
         <UserOverview profile={profile} guilds={guilds} loadingGuilds={loadingGuilds} />
       ) : (

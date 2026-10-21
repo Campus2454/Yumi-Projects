@@ -11,10 +11,10 @@ export type User = {
     discriminator: string;
     public_flags: string;
     flags: string;
-    accent_color: string;
-    avatar_decoration_data: string;
-    banner_color: string;
-    clan: string;
+    accent_color?: string | number | null;
+    avatar_decoration_data?: any;
+    banner_color?: string | null;
+    clan?: string | null;
 }
 
 type Activities = [{
@@ -51,10 +51,10 @@ export type UserData = {
     discriminator: string;
     public_flags: string;
     flags: string;
-    accent_color: string;
-    avatar_decoration_data: string;
-    banner_color: string;
-    clan: string;
+    accent_color?: string | number | null;
+    avatar_decoration_data?: any;
+    banner_color?: string | null;
+    clan?: string | null;
 }
 
 export type PartialGuild = GuildListItemDTO;

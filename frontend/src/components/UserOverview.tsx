@@ -1,12 +1,13 @@
 'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
-import styled, { css, keyframes } from 'styled-components';
+import styled, { css } from 'styled-components';
 import { FaServer, FaCalendarAlt, FaDiscord } from 'react-icons/fa';
 import { TbCrown, TbCopy, TbCheck, TbArrowRight, TbSettings, TbPlus, TbDiamond, TbExternalLink, TbLanguage, TbUser, TbPalette, TbPhoto } from 'react-icons/tb';
 import { BsStars } from 'react-icons/bs';
 import { PartialGuild, User, localeLabels } from '../utils/types';
 import { getAvatarURL, getIconURL } from '../utils/getURL';
+import { SkeletonBlock } from './DashboardSkeleton';
 
 // --- Discord snowflake helpers ---
 const DISCORD_EPOCH = BigInt('1420070400000');
@@ -26,40 +27,26 @@ const getDefaultAvatarURL = (id: string) =>
   `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(id) >> BigInt(22)) % BigInt(6))}.png`;
 
 const formatAccountAge = (createdAt?: Date | null): string => {
-  if (!createdAt) return 'ไม่ระบุ';
+  if (!createdAt) return 'Unknown';
   const diffMs = Date.now() - createdAt.getTime();
-  if (diffMs < 0) return 'เพิ่งสร้าง';
+  if (diffMs < 0) return 'Just now';
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
   const years = Math.floor(diffDays / 365);
   const months = Math.floor((diffDays % 365) / 30);
-  if (years > 0) return months > 0 ? `${years} ปี ${months} เดือน` : `${years} ปี`;
-  if (months > 0) return `${months} เดือน`;
-  return `${Math.max(1, diffDays)} วัน`;
+  if (years > 0) return months > 0 ? `${years}y ${months}mo` : `${years}y`;
+  if (months > 0) return `${months}mo`;
+  return `${Math.max(1, diffDays)}d`;
 };
 
 const formatFullDate = (date?: Date | null): string =>
-  date ? date.toLocaleDateString('th-TH', { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
+  date ? date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-';
 
 // --- Shared styles ---
-const pulse = keyframes`
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-`;
-
-const SkeletonBox = styled.div<{ $width?: string; $height?: string; $radius?: string }>`
-  width: ${({ $width }) => $width || '100%'};
-  height: ${({ $height }) => $height || '20px'};
-  border-radius: ${({ $radius }) => $radius || '8px'};
-  background: rgba(255, 255, 255, 0.07);
-  animation: ${pulse} 1.5s ease-in-out infinite;
-`;
-
 const Container = styled.div`
   display: flex;
   flex-direction: column;
   gap: 22px;
   width: 100%;
-  max-width: 1100px;
   margin: 0 auto;
   padding: 8px 16px 40px;
   font-family: "Kanit", sans-serif;
@@ -67,7 +54,7 @@ const Container = styled.div`
 `;
 
 const Card = styled.div`
-  background: rgba(24, 24, 33, 0.65);
+  background: rgba(17, 10, 10, 0.65);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 14px;
   backdrop-filter: blur(10px);
@@ -117,12 +104,12 @@ const SectionTitle = styled.h2`
   gap: 8px;
 `;
 
-const ButtonLink = styled(Link)`
+const ButtonLink = styled(Link)<{ $variant?: 'invite' }>`
   padding: 6px 14px;
   border-radius: 8px;
-  background: rgba(168, 85, 247, 0.2);
-  color: #d8b4fe;
-  border: 1px solid rgba(168, 85, 247, 0.4);
+  background: ${({ $variant }) => ($variant === 'invite' ? 'rgba(56, 189, 248, 0.15)' : 'rgba(239, 68, 68, 0.18)')};
+  color: ${({ $variant }) => ($variant === 'invite' ? '#38bdf8' : '#fca5a5')};
+  border: 1px solid ${({ $variant }) => ($variant === 'invite' ? 'rgba(56, 189, 248, 0.35)' : 'rgba(239, 68, 68, 0.35)')};
   font-size: 0.8rem;
   font-weight: 500;
   text-decoration: none;
@@ -130,9 +117,9 @@ const ButtonLink = styled(Link)`
   transition: all 0.2s ease;
 
   &:hover {
-    background: #9333ea;
+    background: ${({ $variant }) => ($variant === 'invite' ? '#0284c7' : '#dc2626')};
     color: #fff;
-    border-color: #a855f7;
+    border-color: ${({ $variant }) => ($variant === 'invite' ? '#38bdf8' : '#ef4444')};
   }
 `;
 
@@ -141,7 +128,7 @@ const HoverCard = styled(Card)<{ $accent?: string }>`
 
   &:hover {
     transform: translateY(-2px);
-    border-color: ${({ $accent }) => $accent || 'rgba(168, 85, 247, 0.4)'};
+    border-color: ${({ $accent }) => $accent || 'rgba(239, 68, 68, 0.4)'};
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
   }
 `;
@@ -166,18 +153,22 @@ const HeroCard = styled(Card)`
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 `;
 
-const Banner = styled.div<{ $bg: string }>`
+const Banner = styled.div<{ $bg: string; $hasImage?: boolean }>`
   height: 150px;
   width: 100%;
   background: ${({ $bg }) => $bg};
   position: relative;
 
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(24, 24, 33, 0.9) 100%);
-  }
+  ${({ $hasImage }) =>
+    $hasImage &&
+    css`
+      &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.05) 0%, rgba(24, 24, 33, 0.9) 100%);
+      }
+    `}
 `;
 
 const HeroBody = styled.div`
@@ -208,7 +199,7 @@ const Avatar = styled.a`
   height: 96px;
   border-radius: 50%;
   border: 4px solid #181821;
-  box-shadow: 0 0 24px rgba(168, 85, 247, 0.45);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.35);
   overflow: hidden;
   display: block;
   flex-shrink: 0;
@@ -216,7 +207,7 @@ const Avatar = styled.a`
 
   &:hover {
     transform: scale(1.05);
-    box-shadow: 0 0 30px rgba(168, 85, 247, 0.7);
+    box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
   }
 
   & > img {
@@ -263,8 +254,8 @@ const CopyChip = styled.button`
   transition: all 0.2s ease;
 
   &:hover {
-    background: rgba(168, 85, 247, 0.2);
-    border-color: rgba(168, 85, 247, 0.5);
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.45);
     color: #fff;
   }
 `;
@@ -305,8 +296,8 @@ const StatHeader = styled.div`
 `;
 
 const StatTitle = styled.span`
-  color: #94a3b8;
-  font-size: 0.85rem;
+  color: #b89494;
+  font-size: 1rem;
   font-weight: 500;
 `;
 
@@ -317,7 +308,7 @@ const StatValue = styled.div`
 `;
 
 const StatSub = styled.span`
-  color: #64748b;
+  color: #898989;
   font-size: 0.78rem;
 `;
 
@@ -343,12 +334,12 @@ const DetailLabel = styled.span`
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  color: #94a3b8;
+  color: #b89494;
   font-size: 0.88rem;
 `;
 
 const DetailValue = styled.span`
-  color: #f1f5f9;
+  color: #f9f1f1;
   font-size: 0.9rem;
   font-weight: 500;
   text-align: right;
@@ -358,7 +349,7 @@ const DetailValue = styled.span`
   min-width: 0;
 
   & > a {
-    color: #8abbff;
+    color: #ff8a8a;
   }
 `;
 
@@ -407,12 +398,12 @@ const ActionLabel = styled.span`
 
 const ActionDesc = styled.span`
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #b89494;
 `;
 
 const ActionArrow = styled.span`
   display: inline-flex;
-  color: #64748b;
+  color: #8b6464;
   transition: all 0.2s ease;
 `;
 
@@ -437,13 +428,13 @@ const ServerIcon = styled.div`
   height: 44px;
   border-radius: 12px;
   overflow: hidden;
-  background: #334155;
+  background: #553333;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 1rem;
-  color: #cbd5e1;
+  color: #e1cbcb;
   flex-shrink: 0;
 
   & > img {
@@ -456,7 +447,7 @@ const ServerIcon = styled.div`
 const ServerName = styled.span`
   font-size: 0.95rem;
   font-weight: 600;
-  color: #f1f5f9;
+  color: #f9f1f1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -470,10 +461,25 @@ const EmptyState = styled(Card)`
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  color: #94a3b8;
+  color: #b89494;
 `;
 
 const SERVER_PREVIEW_LIMIT = 6;
+
+function parseAccentColor(accentColor?: string | number | null): string | undefined {
+  if (accentColor == null) return undefined;
+  if (typeof accentColor === 'number') {
+    return `#${accentColor.toString(16).padStart(6, '0')}`;
+  }
+  const str = String(accentColor).trim();
+  if (!str) return undefined;
+  if (str.startsWith('#')) return str;
+  const num = Number(str);
+  if (!Number.isNaN(num) && /^\d+$/.test(str)) {
+    return `#${num.toString(16).padStart(6, '0')}`;
+  }
+  return `#${str.replace(/^#/, '')}`;
+}
 
 // --- Sections ---
 function Hero({ profile }: { profile: User }) {
@@ -482,10 +488,10 @@ function Hero({ profile }: { profile: User }) {
   const bannerUrl = profile.banner
     ? `https://cdn.discordapp.com/banners/${profile.id}/${profile.banner}.${profile.banner.startsWith('a_') ? 'gif' : 'png'}?size=600`
     : undefined;
-  const accent = profile.accent_color ? `#${profile.accent_color.replace('#', '')}` : undefined;
+  const userColor = parseAccentColor(profile.accent_color) || parseAccentColor(profile.banner_color);
   const bannerBg = bannerUrl
     ? `url("${bannerUrl}") center/cover no-repeat`
-    : `linear-gradient(135deg, ${accent || '#4f46e5'} 0%, #7e22ce 50%, #1e1b4b 100%)`;
+    : (userColor || '#334155');
   const createdDate = getDiscordCreationDate(profile.id);
 
   const copyId = async () => {
@@ -500,19 +506,19 @@ function Hero({ profile }: { profile: User }) {
 
   return (
     <HeroCard>
-      <Banner $bg={bannerBg} />
+      <Banner $bg={bannerBg} $hasImage={Boolean(bannerUrl)} />
       <HeroBody>
         <Identity>
-          <Avatar href={avatarUrl} target="_blank" rel="noreferrer" title="ดูรูปโปรไฟล์ขนาดเต็ม">
+          <Avatar href={avatarUrl} target="_blank" rel="noreferrer" title="View full avatar">
             <img src={avatarUrl} alt={profile.username} />
           </Avatar>
           <NameBlock>
             <DisplayName>{profile.global_name || profile.username}</DisplayName>
             <Subline>
               <span>@{profile.username}</span>
-              <CopyChip onClick={copyId} title="คัดลอก Discord ID">
+              <CopyChip onClick={copyId} title="Copy Discord ID">
                 {copied ? <TbCheck style={{ color: '#4ade80' }} /> : <TbCopy />}
-                {copied ? 'คัดลอกแล้ว!' : profile.id}
+                {copied ? 'Copied!' : profile.id}
               </CopyChip>
             </Subline>
           </NameBlock>
@@ -520,11 +526,11 @@ function Hero({ profile }: { profile: User }) {
         <Badges>
           {createdDate && (
             <Badge $color="#38bdf8">
-              <FaCalendarAlt /> สมัครเมื่อ {formatFullDate(createdDate)}
+              <FaCalendarAlt /> Joined {formatFullDate(createdDate)}
             </Badge>
           )}
           {profile.locale && (
-            <Badge $color="#c084fc">
+            <Badge $color="#f87171">
               <TbLanguage /> {(localeLabels as Record<string, string>)[profile.locale] || profile.locale}
             </Badge>
           )}
@@ -537,38 +543,30 @@ function Hero({ profile }: { profile: User }) {
 function Stats({ profile, guildCount, loadingGuilds }: { profile: User; guildCount: number; loadingGuilds: boolean }) {
   const createdDate = getDiscordCreationDate(profile.id);
   return (
-    <Grid $cols={4}>
-      <StatCard $accent="#a855f7">
+    <Grid $cols={3}>
+      <StatCard $accent="#ef4444">
         <StatHeader>
-          <StatTitle>เซิร์ฟเวอร์ที่ดูแล</StatTitle>
-          <IconBox $color="#c084fc" $bg="rgba(168, 85, 247, 0.15)"><FaServer /></IconBox>
+          <StatTitle>Managed Servers</StatTitle>
+          <IconBox $color="#f87171" $bg="rgba(239, 68, 68, 0.15)"><FaServer /></IconBox>
         </StatHeader>
-        <StatValue>{loadingGuilds ? <SkeletonBox $width="60px" $height="28px" /> : `${guildCount} เซิร์ฟเวอร์`}</StatValue>
-        <StatSub>ที่คุณมีสิทธิ์จัดการบอท</StatSub>
+        <StatValue>{loadingGuilds ? <SkeletonBlock $width="60px" $height="28px" /> : `${guildCount} ${guildCount === 1 ? 'Server' : 'Servers'}`}</StatValue>
+        <StatSub>Servers with admin permissions</StatSub>
       </StatCard>
       <StatCard $accent="#38bdf8">
         <StatHeader>
-          <StatTitle>อายุบัญชี Discord</StatTitle>
+          <StatTitle>Account Age</StatTitle>
           <IconBox $color="#38bdf8" $bg="rgba(56, 189, 248, 0.15)"><FaCalendarAlt /></IconBox>
         </StatHeader>
         <StatValue>{formatAccountAge(createdDate)}</StatValue>
-        <StatSub>{createdDate ? `สร้างเมื่อ ${formatFullDate(createdDate)}` : 'Discord Member'}</StatSub>
+        <StatSub>{createdDate ? `Created ${formatFullDate(createdDate)}` : 'Discord Member'}</StatSub>
       </StatCard>
       <StatCard as={Link} href="/dashboard/user/membership" $accent="#f59e0b">
         <StatHeader>
-          <StatTitle>ระดับสมาชิก</StatTitle>
+          <StatTitle>Membership Tier</StatTitle>
           <IconBox $color="#fbbf24" $bg="rgba(245, 158, 11, 0.15)"><TbCrown /></IconBox>
         </StatHeader>
-        <StatValue>สมาชิก</StatValue>
-        <StatSub style={{ color: '#fbbf24' }}>ดูสิทธิประโยชน์และแพ็กเกจ →</StatSub>
-      </StatCard>
-      <StatCard $accent="#5865F2">
-        <StatHeader>
-          <StatTitle>สถานะการเชื่อมต่อ</StatTitle>
-          <IconBox $color="#818cf8" $bg="rgba(88, 101, 242, 0.15)"><FaDiscord /></IconBox>
-        </StatHeader>
-        <StatValue style={{ color: '#4ade80' }}>เชื่อมต่อแล้ว</StatValue>
-        <StatSub>Discord OAuth2</StatSub>
+        <StatValue>Standard</StatValue>
+        <StatSub style={{ color: '#fbbf24' }}>View benefits & plans →</StatSub>
       </StatCard>
     </Grid>
   );
@@ -576,25 +574,31 @@ function Stats({ profile, guildCount, loadingGuilds }: { profile: User; guildCou
 
 function Details({ profile }: { profile: User }) {
   const createdDate = getDiscordCreationDate(profile.id);
+  const accentHex = parseAccentColor(profile.accent_color);
   const rows: { icon: React.ReactNode; label: string; value: React.ReactNode }[] = [
-    { icon: <TbUser />, label: 'ชื่อผู้ใช้', value: `@${profile.username}` },
-    { icon: <TbUser />, label: 'ชื่อที่แสดง', value: profile.global_name || '-' },
-    { icon: <FaCalendarAlt />, label: 'วันที่สร้างบัญชี', value: formatFullDate(createdDate) },
-    { icon: <TbLanguage />, label: 'ภาษา', value: (localeLabels as Record<string, string>)[profile.locale ?? ''] || profile.locale || '-' },
+    { icon: <TbUser />, label: 'Username', value: `@${profile.username}` },
+    { icon: <TbUser />, label: 'Display Name', value: profile.global_name || '-' },
+    { icon: <FaCalendarAlt />, label: 'Created Date', value: formatFullDate(createdDate) },
+    { icon: <TbLanguage />, label: 'Language', value: (localeLabels as Record<string, string>)[profile.locale ?? ''] || profile.locale || '-' },
     {
       icon: <TbPalette />,
-      label: 'สีประจำตัว',
-      value: profile.accent_color ? (
+      label: 'Accent Color',
+      value: accentHex ? (
         <>
-          <Swatch $color={`#${profile.accent_color.replace('#', '')}`} />
-          #{profile.accent_color.replace('#', '')}
+          <Swatch $color={accentHex} />
+          {accentHex}
         </>
       ) : '-',
     },
     {
       icon: <TbPhoto />,
-      label: 'รูปโปรไฟล์',
-      value: profile.avatar ? <a href={getAvatarURL(profile)} target="_blank" rel="noreferrer">เปิดดูรูปเต็ม</a> : 'ค่าเริ่มต้น',
+      label: 'Avatar',
+      value: profile.avatar ? <a href={getAvatarURL(profile)} target="_blank" rel="noreferrer">View full size</a> : 'Default',
+    },
+    {
+      icon: <TbPhoto />,
+      label: 'Banner',
+      value: profile.banner ? <a href={`https://cdn.discordapp.com/banners/${profile.id}/${profile.banner}.${profile.banner.startsWith('a_') ? 'gif' : 'png'}?size=600`} target="_blank" rel="noreferrer">View full size</a> : 'Default',
     },
   ];
 
@@ -611,17 +615,17 @@ function Details({ profile }: { profile: User }) {
 }
 
 const ACTIONS = [
-  { href: '/dashboard', label: 'จัดการเซิร์ฟเวอร์', desc: 'เลือกตั้งค่าบอทในเซิร์ฟเวอร์', color: '#c084fc', bg: 'rgba(168, 85, 247, 0.15)', glow: '#a855f7', icon: <FaServer />, arrow: <TbArrowRight /> },
-  { href: '/dashboard/invite', label: 'เพิ่มบอทลงเซิร์ฟเวอร์', desc: 'เชิญ Yumi เข้า Discord', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', glow: '#38bdf8', icon: <TbPlus />, arrow: <TbExternalLink /> },
-  { href: '/dashboard/user/membership', label: 'แพ็กเกจสมาชิก', desc: 'สิทธิพิเศษและฟังก์ชันพิเศษ', color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.15)', glow: '#f59e0b', icon: <TbDiamond />, arrow: <TbArrowRight /> },
-  { href: '/dashboard/user/premium', label: 'จัดการ Premium', desc: 'สถานะพรีเมียมทั้งหมด', color: '#f472b6', bg: 'rgba(236, 72, 153, 0.15)', glow: '#ec4899', icon: <BsStars />, arrow: <TbArrowRight /> },
+  { href: '/dashboard', label: 'Manage Servers', desc: 'Configure bot in your servers', color: '#f87171', bg: 'rgba(239, 68, 68, 0.15)', glow: '#ef4444', icon: <FaServer />, arrow: <TbArrowRight /> },
+  { href: '/dashboard/invite', label: 'Add Bot to Server', desc: 'Invite Yumi to Discord', color: '#38bdf8', bg: 'rgba(56, 189, 248, 0.15)', glow: '#38bdf8', icon: <TbPlus />, arrow: <TbExternalLink /> },
+  { href: '/dashboard/user/membership', label: 'Membership Plans', desc: 'Special perks & features', color: '#fbbf24', bg: 'rgba(245, 158, 11, 0.15)', glow: '#f59e0b', icon: <TbDiamond />, arrow: <TbArrowRight /> },
+  { href: '/dashboard/user/premium', label: 'Manage Premium', desc: 'All premium subscription status', color: '#f472b6', bg: 'rgba(236, 72, 153, 0.15)', glow: '#ec4899', icon: <BsStars />, arrow: <TbArrowRight /> },
 ];
 
 function QuickActions() {
   return (
     <div>
       <SectionHeader>
-        <SectionTitle><TbSettings style={{ color: '#c084fc' }} /> เมนูด่วน</SectionTitle>
+        <SectionTitle><TbSettings style={{ color: '#ec5b5b' }} /> Quick Actions</SectionTitle>
       </SectionHeader>
       <Grid $cols={1}>
         {ACTIONS.map((action) => (
@@ -646,10 +650,10 @@ function ManagedServers({ guilds, loading }: { guilds?: PartialGuild[]; loading:
   return (
     <div>
       <SectionHeader>
-        <SectionTitle><FaServer style={{ color: '#38bdf8' }} /> เซิร์ฟเวอร์ที่คุณดูแล</SectionTitle>
+        <SectionTitle><FaServer style={{ color: '#ec5b5b' }} /> Managed Servers</SectionTitle>
         {guilds && guilds.length > 0 && (
-          <Link href="/dashboard" style={{ color: '#a855f7', fontSize: '0.88rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500 }}>
-            ดูทั้งหมด ({guilds.length}) <TbArrowRight />
+          <Link href="/dashboard" style={{ color: '#ff8484', fontSize: '0.88rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4, fontWeight: 500 }}>
+            View All ({guilds.length}) <TbArrowRight />
           </Link>
         )}
       </SectionHeader>
@@ -658,8 +662,8 @@ function ManagedServers({ guilds, loading }: { guilds?: PartialGuild[]; loading:
           {[1, 2, 3].map((i) => (
             <Card key={i} style={{ padding: '14px 16px' }}>
               <ServerLeft>
-                <SkeletonBox $width="44px" $height="44px" $radius="12px" />
-                <SkeletonBox $width="120px" $height="18px" />
+                <SkeletonBlock $width="44px" $height="44px" $radius="12px" />
+                <SkeletonBlock $width="120px" $height="18px" />
               </ServerLeft>
             </Card>
           ))}
@@ -674,15 +678,19 @@ function ManagedServers({ guilds, loading }: { guilds?: PartialGuild[]; loading:
                 </ServerIcon>
                 <ServerName title={guild.name}>{guild.name}</ServerName>
               </ServerLeft>
-              <ButtonLink href={`/dashboard/server/${guild.id}/overview`}>จัดการ</ButtonLink>
+              {guild.bot_here ? (
+                <ButtonLink href={`/dashboard/server/${guild.id}/overview`}>Manage</ButtonLink>
+              ) : (
+                <ButtonLink $variant="invite" href={`/dashboard/invite/${guild.id}`}>Invite</ButtonLink>
+              )}
             </ServerCard>
           ))}
         </Grid>
       ) : (
         <EmptyState>
           <FaServer style={{ fontSize: '2.5rem', color: '#64748b' }} />
-          <div>ยังไม่พบเซิร์ฟเวอร์ที่คุณมีสิทธิ์จัดการ หรือยังไม่ได้เชิญบอท</div>
-          <ButtonLink href="/dashboard/invite">เชิญ Yumi เข้าเซิร์ฟเวอร์</ButtonLink>
+          <div>No servers found where you have admin permissions or bot is invited</div>
+          <ButtonLink href="/dashboard/invite">Invite Yumi to Server</ButtonLink>
         </EmptyState>
       )}
     </div>
@@ -698,7 +706,7 @@ export function UserOverview({ profile, guilds, loadingGuilds }: { profile: User
       <TwoColumns>
         <div>
           <SectionHeader>
-            <SectionTitle><TbUser style={{ color: '#a855f7' }} /> ข้อมูลบัญชี</SectionTitle>
+            <SectionTitle><TbUser style={{ color: '#ec5b5b' }} /> Account Details</SectionTitle>
           </SectionHeader>
           <Details profile={profile} />
         </div>
@@ -709,52 +717,65 @@ export function UserOverview({ profile, guilds, loadingGuilds }: { profile: User
   );
 }
 
+const SkeletonCard = styled(Card)`
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+`;
+
+const SkeletonRows = styled(Card)`
+  padding: 6px 20px;
+`;
+
 export function UserOverviewSkeleton() {
   return (
     <Container>
       <HeroCard>
-        <SkeletonBox $height="150px" $radius="0" />
+        <SkeletonBlock $height="150px" $radius="0" />
         <HeroBody>
           <Identity>
-            <SkeletonBox $width="96px" $height="96px" $radius="50%" />
+            <SkeletonBlock $width="96px" $height="96px" $radius="50%" />
             <NameBlock>
-              <SkeletonBox $width="200px" $height="26px" />
-              <SkeletonBox $width="140px" $height="16px" />
+              <SkeletonBlock $width="200px" $height="26px" />
+              <SkeletonBlock $width="140px" $height="16px" />
             </NameBlock>
           </Identity>
         </HeroBody>
       </HeroCard>
       <Grid $cols={4}>
         {[1, 2, 3, 4].map((i) => (
-          <Card key={i} style={{ padding: '18px 20px' }}>
-            <SkeletonBox $width="80px" $height="16px" />
-            <SkeletonBox $width="110px" $height="28px" />
-            <SkeletonBox $width="130px" $height="14px" />
-          </Card>
+          <SkeletonCard key={i}>
+            <SkeletonBlock $width="80px" $height="16px" />
+            <SkeletonBlock $width="110px" $height="28px" />
+            <SkeletonBlock $width="130px" $height="14px" />
+          </SkeletonCard>
         ))}
       </Grid>
       <TwoColumns>
-        <Card style={{ padding: '14px 20px' }}>
-          {[1, 2, 3, 4, 5].map((i) => (
-            <SkeletonBox key={i} $height="40px" $radius="6px" style={{ margin: '8px 0' }} />
+        <SkeletonRows>
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <SkeletonBlock key={i} $height="34px" $radius="6px" $margin="10px 0" />
           ))}
-        </Card>
+        </SkeletonRows>
         <Grid $cols={1}>
           {[1, 2, 3, 4].map((i) => (
-            <Card key={i} style={{ padding: '16px 18px' }}>
-              <SkeletonBox $height="42px" $radius="10px" />
-            </Card>
+            <SkeletonCard key={i} style={{ flexDirection: 'row', alignItems: 'center', padding: '16px 18px' }}>
+              <SkeletonBlock $width="42px" $height="42px" $radius="10px" />
+              <SkeletonBlock $width="60%" $height="16px" />
+            </SkeletonCard>
           ))}
         </Grid>
       </TwoColumns>
       <Grid $cols={3}>
         {[1, 2, 3].map((i) => (
-          <Card key={i} style={{ padding: '14px 16px' }}>
+          <SkeletonCard key={i} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
             <ServerLeft>
-              <SkeletonBox $width="44px" $height="44px" $radius="12px" />
-              <SkeletonBox $width="120px" $height="18px" />
+              <SkeletonBlock $width="44px" $height="44px" $radius="12px" />
+              <SkeletonBlock $width="120px" $height="18px" />
             </ServerLeft>
-          </Card>
+            <SkeletonBlock $width="64px" $height="30px" $radius="8px" />
+          </SkeletonCard>
         ))}
       </Grid>
     </Container>
