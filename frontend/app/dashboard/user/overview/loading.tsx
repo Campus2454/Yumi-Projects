@@ -1,5 +1,10 @@
-import { UserInfoSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader, UserInfoRows } from "@/src/components/DashSections";
 
 export default function UserOverviewLoading() {
-    return <UserInfoSkeleton />;
+    return (
+        <div>
+            <PageHeader title="User Info" />
+            <UserInfoRows />
+        </div>
+    );
 }

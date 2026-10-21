@@ -1,5 +1,9 @@
-import { GenericSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader } from "@/src/components/DashSections";
 
-export default function UserLogoutLoading() {
-    return <GenericSkeleton />;
+export default function LogoutLoading() {
+    return (
+        <div>
+            <PageHeader title="Logout" />
+        </div>
+    );
 }

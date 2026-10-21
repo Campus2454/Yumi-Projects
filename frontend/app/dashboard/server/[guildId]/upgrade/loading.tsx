@@ -1,5 +1,9 @@
-import { GenericSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader } from "@/src/components/DashSections";
 
 export default function UpgradeLoading() {
-    return <GenericSkeleton />;
+    return (
+        <div>
+            <PageHeader title="Upgrade Yumi Bot" />
+        </div>
+    );
 }

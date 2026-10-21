@@ -1,5 +1,9 @@
-import { GenericSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader } from "@/src/components/DashSections";
 
-export default function UserMembershipLoading() {
-    return <GenericSkeleton />;
+export default function MembershipLoading() {
+    return (
+        <div>
+            <PageHeader title="Membership" />
+        </div>
+    );
 }

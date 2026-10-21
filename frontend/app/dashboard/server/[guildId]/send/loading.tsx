@@ -1,5 +1,9 @@
-import { SendSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader } from "@/src/components/DashSections";
 
 export default function SendLoading() {
-    return <SendSkeleton />;
+    return (
+        <div>
+            <PageHeader title="Embeds" />
+        </div>
+    );
 }

@@ -20,6 +20,7 @@ export default function DashSidebar() {
   const dashboardType = pathname.startsWith('/dashboard/server') ? 'server'
       : pathname.startsWith('/dashboard/user') ? 'user'
           : null;
+  const guildId = (dashboardType === 'server' ? pathname.split('/')[3] : undefined) || guild?.id || '0';
   const menuRef = useRef<HTMLDivElement>(null);
   const [menuActive, setMenuActive] = useState(false);
   const [menuActiveTarget, setMenuActiveTarget] = useState(false);
@@ -144,7 +145,7 @@ export default function DashSidebar() {
       if(!menuActive)setMenuActiveTarget(false);
   }, [menuActive]);
   useEffect(() => {
-    const category = dashboardType === 'server' ? serverMap(guild?.id || '0') : userMap;
+    const category = dashboardType === 'server' ? serverMap(guildId) : userMap;
     setCategoryMenu(m=>m.map((it,i)=>category[i]?.items.some(i=>i.path === pathname) ? true : it));
 
     document.querySelectorAll('#sub-menu').forEach(subMenu => {
@@ -236,7 +237,6 @@ export default function DashSidebar() {
               </div></div>
 
               {(() => {
-                const guildId = guild?.id || '0';
                 const categories = dashboardType === 'server' ? serverMap(guildId) : userMap;
 
                 return (

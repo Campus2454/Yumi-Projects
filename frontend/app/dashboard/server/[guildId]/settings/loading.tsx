@@ -1,5 +1,10 @@
-import { SettingsSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader, SettingsFields } from "@/src/components/DashSections";
 
 export default function SettingsLoading() {
-    return <SettingsSkeleton />;
+    return (
+        <div>
+            <PageHeader title="Server Settings" />
+            <SettingsFields />
+        </div>
+    );
 }

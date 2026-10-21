@@ -1,5 +1,9 @@
-import { GenericSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader } from "@/src/components/DashSections";
 
-export default function UserPremiumLoading() {
-    return <GenericSkeleton />;
+export default function PremiumLoading() {
+    return (
+        <div>
+            <PageHeader title="Manage Premium" />
+        </div>
+    );
 }

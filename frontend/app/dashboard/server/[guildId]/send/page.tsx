@@ -1,20 +1,22 @@
 'use client';
 import { useContext, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { GuildContext, ErrorPopupContext } from "@/src/utils/contexts/Contexts";
 import { DashPageServerFunctionSend } from "@/src/utils/styles";
 import { TbPlus } from "react-icons/tb";
+import { PageHeader } from "@/src/components/DashSections";
 
 export default function ServerSendPage() {
     const { guild } = useContext(GuildContext);
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
     const router = useRouter();
+    const guildId = (useParams().guildId as string | undefined) || guild?.id;
 
     const ip = process.env.NEXT_PUBLIC_API_IP;
 
     useEffect(() => {
         if (typeof window !== 'undefined' && window.location.hostname !== ip) {
-            router.push(`/dashboard/server/${guild?.id || '0'}/overview`);
+            router.push(`/dashboard/server/${guildId}/overview`);
             setErrorPopup({
                 title: 'Sorry!',
                 message: 'This function is currently unavailable.',
@@ -25,9 +27,7 @@ export default function ServerSendPage() {
 
     return (
         <div>
-            <div id='title'>Embeds</div>
-
-            <div id="line" style={{ borderBottom: '1px #fff solid', margin: '20px 50px' }} />
+            <PageHeader title="Embeds" />
 
             <DashPageServerFunctionSend>
                 <div id="new"><TbPlus />Create a new embed</div>

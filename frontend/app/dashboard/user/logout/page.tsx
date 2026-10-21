@@ -3,6 +3,7 @@ import { useState, useContext } from "react";
 import { ErrorPopupContext } from "@/src/utils/contexts/Contexts";
 import { postAuthLogout, postAuthLogoutLocalhost } from "@/src/utils/api";
 import { Spinner_ring } from "@/src/components/Spinner";
+import { PageHeader } from "@/src/components/DashSections";
 
 export default function UserLogoutPage() {
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
@@ -29,9 +30,7 @@ export default function UserLogoutPage() {
 
     return (
         <div>
-            <div id='title'>Logout</div>
-
-            <div id="line" style={{ borderBottom: '1px #fff solid', margin: '20px 50px' }} />
+            <PageHeader title="Logout" />
 
             <div style={{ fontSize: 20, marginBottom: 15 }}>Do you want to log out?</div>
             <button

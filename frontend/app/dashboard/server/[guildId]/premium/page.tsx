@@ -2,33 +2,40 @@
 import { useContext, useEffect, useState } from "react";
 import { DashPageServerGeneralPremium, PricingTableWrapper, PricingTable, PricingTH, PricingTD, PlanName, HighlightTD } from "@/src/utils/styles";
 import { ErrorPopupContext, GuildContext } from "@/src/utils/contexts/Contexts";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { PageHeader } from "@/src/components/DashSections";
 
 export default function ServerPremiumPage() {
     const [premiumType, setPremiumType] = useState<0 | 1>(0);
     const { guild } = useContext(GuildContext);
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
     const router = useRouter();
+    const guildId = (useParams().guildId as string | undefined) || guild?.id;
     const ip = process.env.NEXT_PUBLIC_API_IP;
     const check_mark = <h3 style={{ color: '#86ffa3', fontWeight: 900, fontSize: 'larger' }}>✔</h3>;
     const wrong_mark = <h3 style={{ color: '#ff4141', fontWeight: 900, fontSize: 'larger' }}>✘</h3>;
 
-    useEffect(() => {
-        if (typeof window !== 'undefined' && window.location.hostname !== ip) {
-            router.push(`/dashboard/server/${guild?.id || '0'}/overview`);
+
+    if (typeof window !== 'undefined' && window.location.hostname !== ip) {
+        useEffect(() => {
+            router.push(`/dashboard/server/${guildId}/overview`);
             setErrorPopup({
                 title: 'Sorry!',
                 message: 'This function is currently unavailable.',
                 show: true,
             });
-        }
-    }, []);
+        }, []);
+
+        return <div>
+            <PageHeader title="Bot Premium" />
+
+            <h1 style={{ textAlign: 'center', color: 'white' }}>Nothing here.</h1>
+        </div>;
+    }
 
     return (
         <div>
-            <div id='title'>Bot Premium</div>
-
-            <div id="line" style={{ borderBottom: '1px #fff solid', margin: '20px 50px' }} />
+            <PageHeader title="Bot Premium" />
 
             <DashPageServerGeneralPremium $premiumType={premiumType}>
                 <div id="type" onClick={() => setPremiumType(premiumType === 0 ? 1 : 0)}>

@@ -2,12 +2,12 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useGuildSettings } from "@/src/utils/hooks/useGuildData";
-import { DashPageServerGeneralSettings, Select, InputField, ChangePopup, PopupStatusSaving } from "@/src/utils/styles";
-import { localeLabels, GuildConfig } from "@/src/utils/types";
+import { ChangePopup, PopupStatusSaving } from "@/src/utils/styles";
+import { GuildConfig } from "@/src/utils/types";
 import { Locale } from "discord-api-types/v10";
 import { PulseLoader } from "react-spinners";
 import { saveGuildConfig } from "../../saveGuildConfig";
-import { SettingsSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader, SettingsFields } from "@/src/components/DashSections";
 
 export default function ServerSettingsPage() {
     const guildId = useParams().guildId as string;
@@ -29,8 +29,6 @@ export default function ServerSettingsPage() {
             window.removeEventListener("beforeunload", handleBeforeUnload);
         };
     }, [changePopup]);
-
-    if (!data) return <SettingsSkeleton />;
 
     const buttonSaveChange = async (type: 'save' | 'cancel') => {
         const eLang = document.querySelector('select[name="language"]') as HTMLSelectElement;
@@ -106,33 +104,8 @@ export default function ServerSettingsPage() {
 
     return (
         <div>
-            <div id='title'>Server Settings</div>
-
-            <div id="line" style={{ borderBottom: '1px #fff solid', margin: '20px 50px' }} />
-
-            <DashPageServerGeneralSettings>
-                <div id="language">
-                    Language
-                    <div>
-                        <Select key={data.preferred_locale} translate="no" name="language" defaultValue={data.preferred_locale} onChange={() => setChangePopup(true)}>
-                            {Object.entries(localeLabels).map(([code, label]) => (
-                                <option key={code} value={code}>
-                                    {label}
-                                </option>
-                            ))}
-                        </Select>
-                    </div>
-                </div>
-
-                <br />
-
-                <div id="prefix">
-                    Prefix
-                    <div>
-                        <InputField key={data.prefix} name="prefix" minLength={1} maxLength={1} placeholder='Example: ?' defaultValue={data.prefix} onChange={() => setChangePopup(true)} />
-                    </div>
-                </div>
-            </DashPageServerGeneralSettings>
+            <PageHeader title="Server Settings" />
+            <SettingsFields data={data} onChange={() => setChangePopup(true)} />
 
             <ChangePopup id="changePopup" $isShow={changePopup}>
                 <div>

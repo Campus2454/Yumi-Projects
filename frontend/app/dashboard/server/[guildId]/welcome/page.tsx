@@ -11,7 +11,7 @@ import MessagePreview from "@/src/components/MessagePreview";
 import { TbCrown, TbPlus } from "react-icons/tb";
 import { PulseLoader } from "react-spinners";
 import { saveGuildConfig } from "../../saveGuildConfig";
-import { WelcomeSkeleton } from "@/src/components/DashboardSkeleton";
+import { PageHeader, WelcomeCardSkeleton } from "@/src/components/DashSections";
 
 export default function ServerWelcomePage() {
     const guildId = useParams().guildId as string;
@@ -52,7 +52,15 @@ export default function ServerWelcomePage() {
         };
     }, [changePopup]);
 
-    if (!data) return <WelcomeSkeleton />;
+    if (!data) {
+        return (
+            <div>
+                <PageHeader title="Welcome & Goodbye" />
+                <WelcomeCardSkeleton id="welcome" name="Welcome" />
+                <WelcomeCardSkeleton id="goodbye" name="Goodbye" />
+            </div>
+        );
+    }
 
     type messageChangeType = 'wel' | 'good' | 'send';
     const handleMessageChange = (
@@ -190,9 +198,7 @@ export default function ServerWelcomePage() {
 
     return (
         <div>
-            <div id='title'>Welcome & Goodbye</div>
-
-            <div id="line" style={{ borderBottom: '1px #fff solid', margin: '20px 50px' }} />
+            <PageHeader title="Welcome & Goodbye" />
 
             <DashPageServerFunctionWelcomeGoodBye $isEnabled={welcomeStatus} id="welcome">
                 <div>

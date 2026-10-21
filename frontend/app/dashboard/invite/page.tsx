@@ -15,7 +15,7 @@ export default function InvitePage() {
     return (
         <div className="page" id="page">
             <BackgroundFixed id="background" />
-            <div style={{ height: "100vh", width: "100%", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
+            <div style={{ height: "calc(100vh - 60px)", width: "100%", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center" }}>
                 <div id="page" style={{ width: '100%' }}>
                     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
                         <div style={{ fontSize: '1.5rem' }}>This server does not have Yumi Bot.</div>

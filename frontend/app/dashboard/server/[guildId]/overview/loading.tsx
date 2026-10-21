@@ -1,5 +1,10 @@
-import { OverviewSkeleton } from "@/src/components/DashboardSkeleton";
+import { OverviewCards, PageHeader } from "@/src/components/DashSections";
 
 export default function OverviewLoading() {
-    return <OverviewSkeleton />;
+    return (
+        <div>
+            <PageHeader title="Overview" />
+            <OverviewCards />
+        </div>
+    );
 }
