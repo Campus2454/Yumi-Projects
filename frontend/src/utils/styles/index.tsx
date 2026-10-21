@@ -838,7 +838,7 @@ export const DashSidebar = styled.div`
 
               & > #sub-menu {
 
-                & > div > div {
+                & > div > a {
                   overflow: hidden;
                   transition: all 1s cubic-bezier(0.2, 0.5, 0, 1);
                 }
@@ -903,7 +903,7 @@ export const DashSidebar = styled.div`
               & > #sub-menu {
                 margin: 5px 0px;
 
-                & > div > div {
+                & > div > a {
                   max-width: 30px;
                   margin: 5px 0px;
                   transform: translateX(-5px);
@@ -940,7 +940,7 @@ export const DashSidebar = styled.div`
               & > #sub-menu {
                 margin: 5px;
 
-                & > div > div {
+                & > div > a {
                   max-width: 100%;
                   margin: 5px;
                   transform: translateX(0);
@@ -1045,7 +1045,7 @@ export const DashCategoryMenu = styled.div<{ $isShow: boolean }>`
       transition: transform 0.3s;
       transform: ${({ $isShow }) => $isShow ? 'translateY(0%)' : 'translateY(-100%)'};
 
-      & > div {
+      & > a {
         display: flex;
         align-items: center;
         padding: 5px;
@@ -1111,7 +1111,7 @@ export const FeatureDropdown = styled.div<{ $isShow: boolean }>`
       transition: transform 0.3s;
       transform: ${({ $isShow }) => $isShow ? 'translateY(0%)' : 'translateY(-100%)'};
 
-      & > div {
+      & > a {
         display: flex;
         align-items: center;
         padding: 5px;

@@ -149,7 +149,7 @@ export default function DashSidebar() {
 
     document.querySelectorAll('#sub-menu').forEach(subMenu => {
       const color = '#ff47474d';
-      const items = Array.from(subMenu.querySelectorAll<HTMLDivElement>('div[id]').values());
+      const items = Array.from(subMenu.querySelectorAll<HTMLAnchorElement>('a[id]').values());
       const iFilter = items.filter(e=>e.id === (dashboardType == 'user'
         ? window.location.pathname.split('/')[3] || 'overview'
         : window.location.pathname.split('/')[4] || 'overview'
