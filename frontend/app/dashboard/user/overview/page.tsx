@@ -1,19 +1,34 @@
 'use client';
 import { useContext } from "react";
 import { UserContext } from "@/src/utils/contexts/Contexts";
-import { PageHeader, UserInfoRows } from "@/src/components/DashSections";
-import { getAvatarURL } from "@/src/utils/getURL";
+import { useGuildList } from "@/src/utils/hooks/useGuildData";
+import {
+  UserOverviewContainer,
+  UserProfileHero,
+  UserStatsGrid,
+  UserQuickActions,
+  UserManagedServersHub,
+  UserOverviewSkeleton,
+} from "@/src/components/UserOverviewSections";
 
 export default function UserOverviewPage() {
-    const { user: profile } = useContext(UserContext);
+  const { user: profile, loadingUser } = useContext(UserContext);
+  const { guilds, loadingGuilds } = useGuildList();
 
-    return (
-        <div>
-            <PageHeader title="User Info" />
-            <UserInfoRows
-                profile={profile}
-                avatarLink={profile && <a href={getAvatarURL(profile)} target="_blank" rel="noreferrer" style={{ color: '#8abbff' }}>{profile.avatar}</a>}
-            />
-        </div>
-    );
+  if (loadingUser && !profile) {
+    return <UserOverviewSkeleton />;
+  }
+
+  return (
+    <UserOverviewContainer>
+      <UserProfileHero profile={profile} />
+      <UserStatsGrid
+        profile={profile}
+        guildCount={guilds?.length || 0}
+        loading={loadingGuilds}
+      />
+      <UserQuickActions />
+      <UserManagedServersHub guilds={guilds} loading={loadingGuilds} />
+    </UserOverviewContainer>
+  );
 }
