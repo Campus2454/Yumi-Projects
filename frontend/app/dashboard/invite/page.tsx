@@ -1,16 +1,15 @@
 'use client';
 import { useContext } from "react";
-import { GuildContext, MapGuildsContext } from "@/src/utils/contexts/Contexts";
+import { GuildContext } from "@/src/utils/contexts/Contexts";
 import { BackgroundFixed } from "@/src/utils/styles";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
 export default function InvitePage() {
     const { guild } = useContext(GuildContext);
-    const { guilds } = useContext(MapGuildsContext);
     const params = useParams();
     const guildId = (params?.guildId as string) || guild?.id;
-    const currentGuild = guild?.id === guildId ? guild : guilds?.find(g => g.id === guildId) || guild;
+    const currentGuild = guild?.id === guildId ? guild : undefined;
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
     return (

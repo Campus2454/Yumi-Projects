@@ -10,14 +10,12 @@ import { Repository } from "typeorm";
 import { Membership } from "src/utils/typeorm/entities/Membership";
 import { Client, GatewayIntentBits } from "discord.js";
 import axios from "axios";
-import { MutualGuildDTO } from "global/src/types";
-import * as pLimit from "p-limit";
+import { GuildInfoDTO, GuildListItemDTO, GuildOverviewDTO, GuildSettingsDTO, GuildWelcomeDTO } from "global/src/types";
 import { fetchWithCacheAndRetry } from "src/utils/discord-request.helper";
 
 @Injectable()
 export class DiscordService implements IDiscordService {
     private client: Client;
-    private apiLimit = pLimit(3); // จำกัดทุกการยิงเข้า Discord API พร้อมกันไม่เกิน 3 Concurrent Requests
 
     constructor(
         @Inject(SERVICES.DISCORD_HTTP) private readonly discordHttpService: IDiscordHttpService,
@@ -114,50 +112,70 @@ export class DiscordService implements IDiscordService {
         );
     }
 
-    // getMutualGuilds ใช้ Concurrent Limit + Cache ทั้งระบบ
-    async getMutualGuilds(accessToken: string): Promise<MutualGuildDTO[]> {
+    // รายการ Guild ของ User (เฉพาะ Admin) ไม่ดึง DB หรือข้อมูลรายละเอียดของ Guild
+    async getMutualGuilds(accessToken: string): Promise<GuildListItemDTO[]> {
         const userGuilds = (await this.getUserGuilds(accessToken)) || [];
         const botGuilds = (await this.getBotGuilds()) || [];
 
-        const adminUserGuilds = userGuilds.filter(({ permissions }) => (parseInt(permissions) & 0x8) === 8);
+        return userGuilds
+            .filter(({ permissions }) => (parseInt(permissions) & 0x8) === 8)
+            .map((g) => ({
+                id: g.id,
+                name: g.name,
+                icon: g.icon,
+                owner: g.owner,
+                permissions: g.permissions,
+                features: g.features,
+                bot_here: botGuilds.some((botGuild) => botGuild.id === g.id),
+            }));
+    }
 
-        const guilds = await Promise.all(
-            adminUserGuilds.map((g) =>
-                this.apiLimit(async () => {
-                    const botHere = botGuilds.some((botGuild) => botGuild.id === g.id);
-                    const gC = await this.guildConfigRepository.findOne({ where: { guildId: g.id } });
+    async getGuildInfo(guildId: string): Promise<GuildInfoDTO> {
+        const [botGuilds, data] = await Promise.all([this.getBotGuilds(), this.getGuildData(guildId)]);
+        const botHere = (botGuilds || []).some((botGuild) => botGuild.id === guildId);
+        return {
+            id: guildId,
+            name: data?.name,
+            icon: data?.icon,
+            bot_here: botHere,
+        };
+    }
 
-                    const config = {
-                        config: botHere ? gC?.toJSON() : undefined,
-                        Membership: undefined,
-                    };
+    async getGuildOverview(guildId: string): Promise<GuildOverviewDTO> {
+        const channels = (await this.getGuildChannels(guildId)) || [];
+        return {
+            id: guildId,
+            members: undefined,
+            channels: {
+                text: channels.filter((c) => c.type === 0).length,
+                voice: channels.filter((c) => c.type === 2).length,
+            },
+        };
+    }
 
-                    let guildData = undefined;
-                    if (botHere) {
-                        // ดึงข้อมูล Guild Data + Channels แบบขนานคู่กัน
-                        const [data, channels] = await Promise.all([
-                            this.getGuildData(g.id),
-                            this.getGuildChannels(g.id),
-                        ]);
+    async getGuildSettings(guildId: string): Promise<GuildSettingsDTO> {
+        const [data, gC] = await Promise.all([
+            this.getGuildData(guildId),
+            this.guildConfigRepository.findOne({ where: { guildId } }),
+        ]);
+        return {
+            id: guildId,
+            preferred_locale: data?.preferred_locale,
+            prefix: gC?.prefix,
+        };
+    }
 
-                        guildData = {
-                            ...data,
-                            channels: channels || [],
-                            members: undefined,
-                        };
-                    }
-
-                    return {
-                        ...g,
-                        bot_here: botHere,
-                        data: guildData,
-                        database: config || undefined,
-                    };
-                })
-            )
-        );
-
-        return guilds;
+    async getGuildWelcome(guildId: string): Promise<GuildWelcomeDTO> {
+        const [channels, gC] = await Promise.all([
+            this.getGuildChannels(guildId),
+            this.guildConfigRepository.findOne({ where: { guildId } }),
+        ]);
+        return {
+            id: guildId,
+            welcomeSetting: gC?.welcomeSetting ?? undefined,
+            channels: channels || [],
+            tier: undefined,
+        };
     }
 
     getStatistics() {

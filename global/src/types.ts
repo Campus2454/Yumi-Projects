@@ -128,6 +128,42 @@ export interface GuildDTO {
   preferred_locale: Locale,
 };
 
+export interface GuildListItemDTO {
+  id: string;
+  name: string;
+  icon: string;
+  owner: boolean;
+  permissions: string;
+  features: string[];
+  bot_here: boolean;
+};
+
+export interface GuildInfoDTO {
+  id: string;
+  name: string;
+  icon: string;
+  bot_here: boolean;
+};
+
+export interface GuildOverviewDTO {
+  id: string;
+  members?: GuildDTO['members'];
+  channels: { text: number; voice: number };
+};
+
+export interface GuildSettingsDTO {
+  id: string;
+  preferred_locale?: Locale;
+  prefix?: string;
+};
+
+export interface GuildWelcomeDTO {
+  id: string;
+  welcomeSetting?: GuildWelcomeSetting;
+  channels: GuildDTO['channels'];
+  tier?: number;
+};
+
 export interface MutualGuildDTO {
   id: string;
   name: string;

@@ -2,17 +2,17 @@
 
 import React, { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
-import { ErrorPopupContext, GuildContext, MapGuildsContext, UserContext } from '../utils/contexts/Contexts';
+import { ErrorPopupContext, GuildContext, UserContext } from '../utils/contexts/Contexts';
 import { AppBar } from './AppBar';
 import { Footer } from './Footer';
-import { PartialGuild, User } from '../utils/types';
+import { GuildInfo, User } from '../utils/types';
 import { ErrorPopup } from '../utils/styles';
 import { MdClose } from 'react-icons/md';
 import { useHideLoading } from '../utils/hooks/useHideLoading';
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const [guild, setGuild] = useState<PartialGuild>();
-  const updateGuild = (guild: PartialGuild) => setGuild(guild);
+  const [guild, setGuild] = useState<GuildInfo>();
+  const updateGuild = (guild: GuildInfo) => setGuild(guild);
 
   const [user, setUser] = useState<User>();
   const [loadingUser, setLoadingUser] = useState<boolean>(true);
@@ -21,13 +21,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const updateLoadingUser = (loadingUser: boolean) => setLoadingUser(loadingUser);
   const updateUserError = (error: any) => setUserError(error);
 
-  const [guilds, setGuilds] = useState<PartialGuild[]>();
-  const [errorGuilds, setErrorGuilds] = useState();
-  const [loadingGuilds, setLoadingGuilds] = useState<boolean>(true);
-  const updateGuilds = (guilds: PartialGuild[]) => setGuilds(guilds);
-  const updateLoadingGuilds = (loadingGuilds: boolean) => setLoadingGuilds(loadingGuilds);
-  const updateErrorGuilds = (errorGuilds: any) => setErrorGuilds(errorGuilds);
-  
   const [errorPopup, setErrorPopup] = useState<{title?: string, message?: string, show: boolean}>();
   const updateErrorPopup = (errorPopup: {title?: string, message?: string, show: boolean}) => setErrorPopup(errorPopup);
 
@@ -41,8 +34,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorPopupContext.Provider value={{ errorPopup, updateErrorPopup }}>
     <UserContext.Provider value={{ user, loadingUser, userError, updateUser, updateLoadingUser, updateUserError }}>
-    <MapGuildsContext.Provider value={{ guilds, loadingGuilds, errorGuilds, updateGuilds, updateLoadingGuilds, updateErrorGuilds }}>
-    <GuildContext.Provider value={{ guild, updateGuild }}>
+        <GuildContext.Provider value={{ guild, updateGuild }}>
 
       <ErrorPopup $show={errorPopup?.show} onClick={() => updateErrorPopup({ ...errorPopup, show: false })}>
         {errorPopup?.title || errorPopup?.message ? (<div onClick={(e) => e.stopPropagation()}>
@@ -57,7 +49,6 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <Footer/>
 
     </GuildContext.Provider>
-    </MapGuildsContext.Provider>
     </UserContext.Provider>
     </ErrorPopupContext.Provider>
   );

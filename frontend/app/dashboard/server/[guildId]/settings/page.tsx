@@ -1,6 +1,7 @@
 'use client';
-import { useContext, useState, useEffect } from "react";
-import { GuildContext } from "@/src/utils/contexts/Contexts";
+import { useState, useEffect } from "react";
+import { useParams } from "next/navigation";
+import { useGuildSettings } from "@/src/utils/hooks/useGuildData";
 import { DashPageServerGeneralSettings, Select, InputField, ChangePopup, PopupStatusSaving } from "@/src/utils/styles";
 import { localeLabels, GuildConfig } from "@/src/utils/types";
 import { Locale } from "discord-api-types/v10";
@@ -9,7 +10,8 @@ import { saveGuildConfig } from "../../saveGuildConfig";
 import { SettingsSkeleton } from "@/src/components/DashboardSkeleton";
 
 export default function ServerSettingsPage() {
-    const { guild, updateGuild } = useContext(GuildContext);
+    const guildId = useParams().guildId as string;
+    const { data, mutate } = useGuildSettings(guildId);
     const [changePopup, setChangePopup] = useState<boolean | null>(null);
     const [popupStatusSaving, setPopupStatusSaving] = useState<boolean | null>(null);
     const [savingChangesLoading, setSavingChangesLoading] = useState(false);
@@ -28,16 +30,16 @@ export default function ServerSettingsPage() {
         };
     }, [changePopup]);
 
-    if (!guild) return <SettingsSkeleton />;
+    if (!data) return <SettingsSkeleton />;
 
     const buttonSaveChange = async (type: 'save' | 'cancel') => {
         const eLang = document.querySelector('select[name="language"]') as HTMLSelectElement;
         const ePrefix = document.querySelector('input[name="prefix"]') as HTMLInputElement;
 
-        if (eLang && ePrefix && guild) {
+        if (eLang && ePrefix && data) {
             if (type === 'cancel') {
-                eLang.value = guild.data.preferred_locale || 'en_US';
-                ePrefix.value = guild.database?.config?.prefix || '!';
+                eLang.value = data.preferred_locale || 'en_US';
+                ePrefix.value = data.prefix || '!';
                 setChangePopup(false);
                 return;
             } else if (type === 'save') {
@@ -65,7 +67,7 @@ export default function ServerSettingsPage() {
                     setSavingChangesLoading(true);
 
                     const guildConfig: GuildConfig = {
-                        guildId: guild.id,
+                        guildId,
                         guildSettings: {
                             language: eLang.value as Locale,
                             prefix: ePrefix.value,
@@ -80,20 +82,7 @@ export default function ServerSettingsPage() {
                         setTimeout(() => {
                             const e = document.getElementById('statusSavingText');
                             if (e) e.textContent = saveStatus.statusText;
-                            updateGuild({
-                                ...guild,
-                                database: {
-                                    ...guild.database,
-                                    config: {
-                                        ...guild.database.config,
-                                        prefix: saveStatus.config.prefix,
-                                    },
-                                },
-                                data: {
-                                    ...(guild.data || {}),
-                                    preferred_locale: saveStatus.config.language,
-                                },
-                            });
+                            mutate({ ...data, prefix: saveStatus.config.prefix, preferred_locale: saveStatus.config.language }, { revalidate: false });
                         }, 500);
 
                         setTimeout(() => {
@@ -125,7 +114,7 @@ export default function ServerSettingsPage() {
                 <div id="language">
                     Language
                     <div>
-                        <Select translate="no" name="language" defaultValue={guild.data.preferred_locale} onChange={() => setChangePopup(true)}>
+                        <Select key={data.preferred_locale} translate="no" name="language" defaultValue={data.preferred_locale} onChange={() => setChangePopup(true)}>
                             {Object.entries(localeLabels).map(([code, label]) => (
                                 <option key={code} value={code}>
                                     {label}
@@ -140,7 +129,7 @@ export default function ServerSettingsPage() {
                 <div id="prefix">
                     Prefix
                     <div>
-                        <InputField name="prefix" minLength={1} maxLength={1} placeholder='Example: ?' defaultValue={guild.database?.config?.prefix} onChange={() => setChangePopup(true)} />
+                        <InputField key={data.prefix} name="prefix" minLength={1} maxLength={1} placeholder='Example: ?' defaultValue={data.prefix} onChange={() => setChangePopup(true)} />
                     </div>
                 </div>
             </DashPageServerGeneralSettings>

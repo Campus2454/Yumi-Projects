@@ -1,5 +1,5 @@
 import { APIGuild, APIEmbed, Locale, Snowflake, APIApplicationCommand, APIGuildChannel, ChannelType, RESTPostAPIChannelMessageJSONBody, APIGuildMember, APIRole, APIUser } from "discord-api-types/v10";
-import { GuildDTO, MutualGuildDTO } from "global";
+import { GuildInfoDTO, GuildListItemDTO } from "global";
 
 export type User = {
     id: string;
@@ -57,49 +57,8 @@ export type UserData = {
     clan: string;
 }
 
-export type PartialGuild = {
-    id: string;
-    name: string;
-    icon: string;
-    owner: boolean;
-    permissions: string;
-    features: string[];
-    bot_here: boolean;
-    data: GuildDTO;
-    database: {
-        config: {
-            id: string,
-            guildId: string,
-            prefix: string,
-            auditLogSettings?: string,
-            welcomeSetting?: {
-                welcome?: {
-                    isEnabled: boolean,
-                    channel?: { isEnabled: boolean, id?: string, message?: RESTPostAPIChannelMessageJSONBody },
-                    user?: { isEnabled: boolean, message?: RESTPostAPIChannelMessageJSONBody }
-                },
-                goodbye?: {
-                    isEnabled: boolean,
-                    channel?: { isEnabled: boolean, id?: string, message?: RESTPostAPIChannelMessageJSONBody },
-                    user?: { isEnabled: boolean, message?: RESTPostAPIChannelMessageJSONBody }
-                }
-            },
-        },
-        membership?: {
-            id: number,
-            discordId: string,
-            type: 'premium' | 'membership',
-            duration: 'monthly' | 'yearly',
-            tier: number,
-            serverId: string,
-            serverIds: string[],
-            isActive: boolean,
-            startDate: Date,
-            endDate: Date;
-        }
-    };
-};
-// export type PartialGuild = MutualGuildDTO;
+export type PartialGuild = GuildListItemDTO;
+export type GuildInfo = GuildInfoDTO;
 
 export type AuthStatus = {
     id: string;

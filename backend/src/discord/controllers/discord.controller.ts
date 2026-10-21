@@ -71,10 +71,28 @@ export class DiscordController {
         return this.guildConfigService.setConfig(body, res);
     }
 
+    @Get('guilds/:guildId/info')
+    @UseGuards(AuthenticatedGuard)
+    getGuildInfo(@Param('guildId') guildId: string){
+        return this.discordService.getGuildInfo(guildId);
+    }
+
+    @Get('guilds/:guildId/overview')
+    @UseGuards(AuthenticatedGuard)
+    getGuildOverview(@Param('guildId') guildId: string){
+        return this.discordService.getGuildOverview(guildId);
+    }
+
     @Get('guilds/:guildId/settings')
     @UseGuards(AuthenticatedGuard)
-    getGuildConfig(@Param('guildId') guildId: string, @Res() res: Response){
-        return this.guildConfigService.getConfig(guildId, res);
+    getGuildSettings(@Param('guildId') guildId: string){
+        return this.discordService.getGuildSettings(guildId);
+    }
+
+    @Get('guilds/:guildId/welcome')
+    @UseGuards(AuthenticatedGuard)
+    getGuildWelcome(@Param('guildId') guildId: string){
+        return this.discordService.getGuildWelcome(guildId);
     }
 
     @Delete('guilds/settings')

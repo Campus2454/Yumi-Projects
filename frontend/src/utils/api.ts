@@ -1,5 +1,6 @@
 import axios, { AxiosRequestConfig } from 'axios';
 import { PartialGuild, AuthStatus, Commands } from './types';
+import { GuildInfoDTO, GuildOverviewDTO, GuildSettingsDTO, GuildWelcomeDTO } from 'global';
 import { APIGuildChannel, ChannelType } from 'discord-api-types/v10';
 
 const CONFIG: AxiosRequestConfig = {
@@ -33,3 +34,12 @@ export const getBotCommandsLocalhost = () => axios.post<Commands>(`${process.env
 
 export const getGuildChannel = (guildId: string) => axios.post< | APIGuildChannel<ChannelType.GuildText> | APIGuildChannel<ChannelType.GuildVoice> | APIGuildChannel<ChannelType.GuildCategory> | APIGuildChannel<ChannelType.GuildAnnouncement> | APIGuildChannel<ChannelType.GuildForum> | APIGuildChannel<ChannelType.GuildStageVoice>[]>(`${process.env.NEXT_PUBLIC_API_DOMAIN}/guilds/${guildId}/channels`, CONFIG);
 export const getGuildChannelLocalhost = (guildId: string) => axios.post< | APIGuildChannel<ChannelType.GuildText> | APIGuildChannel<ChannelType.GuildVoice> | APIGuildChannel<ChannelType.GuildCategory> | APIGuildChannel<ChannelType.GuildAnnouncement> | APIGuildChannel<ChannelType.GuildForum> | APIGuildChannel<ChannelType.GuildStageVoice>[]>(`${process.env.NEXT_PUBLIC_API_IP_URL}/guilds/${guildId}/channels`, CONFIG);
+
+const apiBase = () => window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME ? process.env.NEXT_PUBLIC_API_DOMAIN : process.env.NEXT_PUBLIC_API_IP_URL;
+const getGuildPage = <T>(guildId: string, page: 'info' | 'overview' | 'settings' | 'welcome') =>
+  axios.get<T>(`${apiBase()}/discord/guilds/${guildId}/${page}`, CONFIG).then(({ data }) => data);
+
+export const getGuildInfo = (guildId: string) => getGuildPage<GuildInfoDTO>(guildId, 'info');
+export const getGuildOverview = (guildId: string) => getGuildPage<GuildOverviewDTO>(guildId, 'overview');
+export const getGuildSettings = (guildId: string) => getGuildPage<GuildSettingsDTO>(guildId, 'settings');
+export const getGuildWelcome = (guildId: string) => getGuildPage<GuildWelcomeDTO>(guildId, 'welcome');

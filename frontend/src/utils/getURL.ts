@@ -1,6 +1,6 @@
 import { PartialGuild, User } from './types';
 
-export const getIconURL = (guild: PartialGuild) => {
+export const getIconURL = (guild: Pick<PartialGuild, 'id' | 'icon'>) => {
   const extension = guild.icon.startsWith('a_') ? 'gif' : 'png';
   return `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.${extension}`;
 }

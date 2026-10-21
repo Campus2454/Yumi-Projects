@@ -3,11 +3,11 @@ import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { Suspense } from 'react';
 import { mockGuilds } from "../../src/__mocks__/guilds";
 import { useContext, useState, useEffect } from "react";
-import { GuildContext, MapGuildsContext, UserContext } from "../../src/utils/contexts/Contexts";
+import { UserContext } from "../../src/utils/contexts/Contexts";
 import { GuildMenuItem } from "../../src/components/GuildMenuItem";
 import { Container, GuildMenuItemStyle, GuildMenuItemStyleLoading, NotFoundImg, NotFoundText, ShowPopupLoadingErrorBox, ShowPopupLoadingError, BackgroundFixed, GuildMenuCreateData, UserMenuItem } from "../../src/utils/styles";
 import { useFetchUser } from "../../src/utils/hooks/useFetchUser";
-import { useFetchGuilds } from "../../src/utils/hooks/useFetchGuilds";
+import { useGuildList } from "../../src/utils/hooks/useGuildData";
 import axios from "axios";
 import { PartialGuild, AuthStatus } from "../../src/utils/types";
 import { getMutualGuilds, getAuthStatus, getAuthStatusLocalhost, getMutualGuildsLocalhost } from "../../src/utils/api";
@@ -32,84 +32,24 @@ function MenuPageContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const pathname = usePathname();
-    const { updateGuild } = useContext(GuildContext);
     const { user, userError, loadingUser } = useContext(UserContext);
-    const { guilds, loadingGuilds, errorGuilds, updateGuilds, updateLoadingGuilds, updateErrorGuilds } = useContext(MapGuildsContext);
+    const { guilds, loadingGuilds, errorGuilds, refreshGuilds } = useGuildList();
 
     const apiDomain = process.env.NEXT_PUBLIC_API_DOMAIN;
     const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
     const apiIp = process.env.NEXT_PUBLIC_API_IP_URL;
 
-    const handleClick = async (guild: PartialGuild) => {
-        updateGuild(guild);
-        if(guild.bot_here && guild.database){
-            router.push(`/dashboard/server/${guild.id}/main`);
-        }else if(guild.bot_here && !guild.database){
-            setShowPopupCreateDataInDatabase(true);
-            setCreateDataInDatabaseLoading(true);
-            const CreateGuild = async () => {
-                if(window.location.hostname == hostname){
-                    try{
-                        const res = await fetch(`${apiDomain}/discord/createGuild/${guild.id}`, {
-                            method: 'post'
-                        });
-                        if(res.ok){
-                            return 'Succeed';
-                        }else{
-                            return `Error ${res.status}`;
-                        }
-                    }catch(error: any){
-                        console.error(error);
-                        return `Error: ${error.name}`;
-                    };
-                }else{
-                    try{
-                        const res = await fetch(`${apiIp}/discord/createGuild/${guild.id}`, {
-                            method: 'post'
-                        });
-                        if(res.ok){
-                            return 'Succeed';
-                        }else{
-                            return `Error ${res.status}`;
-                        }
-                    }catch(error: any){
-                        console.error(error);
-                        return `Error: ${error.name}`;
-                    };
-                }
-            };
-            const createGuild = await CreateGuild();
-            setTimeout(() => {
-                setCreateDataInDatabaseLoading(false);
-                setTimeout(() => {
-                    const e = document.getElementById('createStatus');
-                    if(e){e.textContent = createGuild};
-                    setTimeout(() => { window.location.reload() }, 3000);
-                }, 1000);
-            }, 1000);
-        }else{
-            router.push(`/dashboard/invite`);
-        }
-        // window.location.href = `/dashboard/${guild.id}/main`;
-    };
-    const fetchGuilds = useFetchGuilds();
     // if(window.location.pathname === '/dashboard/'){
     //     window.history.replaceState(null, '', '/dashboard');
     // };
 
     useEffect(() => {
-        if(user && !guilds){
-            fetchGuilds();
-        };
-        
         const to = searchParams?.get('to');
         if(!to)return;
         const guildId = to.replace(/\D/g, '');
         if(to.startsWith('server') && guilds){
             const guild = guilds.find(g => g.id == guildId);
-            console.log(guild);
             if(!guild){router.push(pathname || '/dashboard');return};
-            updateGuild(guild);
             router.push(`/dashboard/server/${guildId}/${to.split('/')[2]}`);
         }else if(to.startsWith('user') && user){ router.push(`/dashboard/user/${to.split('/')[1]}`) }
     }, [user, guilds]);
@@ -203,7 +143,7 @@ function MenuPageContent() {
                 
                     <h2 style={{ display: 'flex', alignItems: 'center', }}>
                         Guilds
-                        <TbRefresh style={{ marginLeft: 10, color: 'rgb(255, 100, 100)', cursor: 'pointer', }} onClick={()=>fetchGuilds()}/>
+                        <TbRefresh style={{ marginLeft: 10, color: 'rgb(255, 100, 100)', cursor: 'pointer', }} onClick={()=>refreshGuilds()}/>
                     </h2>
                     {/* <h2 style={{ marginTop: 0, }}>Select a Server</h2> */}
                     {guilds.map((guild) => (
@@ -212,7 +152,7 @@ function MenuPageContent() {
                         </div>
                     ))}
                     <br />
-                </div> : <div style={{ display: 'flex', alignItems: 'center', }}>The server you are administrator was not found.<TbRefresh style={{ marginLeft: 10, color: 'rgb(255, 100, 100)', cursor: 'pointer', }} onClick={()=>fetchGuilds()}/></div>}
+                </div> : <div style={{ display: 'flex', alignItems: 'center', }}>The server you are administrator was not found.<TbRefresh style={{ marginLeft: 10, color: 'rgb(255, 100, 100)', cursor: 'pointer', }} onClick={()=>refreshGuilds()}/></div>}
                 
             </Container>
         </>);

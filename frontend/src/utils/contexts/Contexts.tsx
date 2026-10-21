@@ -1,9 +1,9 @@
 import { createContext } from "react";
-import { PartialGuild, User } from "../types";
+import { GuildInfo, User } from "../types";
 
 type GuildContextType = {
-    guild?: PartialGuild;
-    updateGuild: (guild: PartialGuild) => void;
+    guild?: GuildInfo;
+    updateGuild: (guild: GuildInfo) => void;
 };
 export const GuildContext = createContext<GuildContextType>({
     updateGuild: () => {},
@@ -24,23 +24,6 @@ export const UserContext = createContext<UserContextType>({
     updateUser: () => {},
     updateLoadingUser: () => {},
     updateUserError: () => {}  
-});
-
-type MapGuildContextType = {
-    guilds?: PartialGuild[];
-    loadingGuilds: boolean;
-    errorGuilds?: any;
-    updateGuilds: (guild: PartialGuild[]) => void;
-    updateLoadingGuilds: (loadingGuilds: boolean) => void;
-    updateErrorGuilds: (errorGuilds: any) => void;
-};
-export const MapGuildsContext = createContext<MapGuildContextType>({
-    guilds: undefined,
-    loadingGuilds: true,
-    errorGuilds: undefined,
-    updateGuilds: () => {},
-    updateLoadingGuilds: () => {},
-    updateErrorGuilds: () => {}
 });
 
 type ErrorPopupType = {

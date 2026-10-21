@@ -1,7 +1,7 @@
 'use client';
 import { useContext, useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { GuildContext } from "@/src/utils/contexts/Contexts";
+import { useParams, useRouter } from "next/navigation";
+import { useGuildWelcome } from "@/src/utils/hooks/useGuildData";
 import { DashPageServerFunctionWelcomeGoodBye, Select, TextArea, TextLimit, ChangePopup, PopupStatusSaving } from "@/src/utils/styles";
 import { textChannelTypes, welcome_limits, discord_limits, GuildConfig } from "@/src/utils/types";
 import { RESTPostAPIChannelMessageJSONBody } from "discord-api-types/v10";
@@ -14,7 +14,8 @@ import { saveGuildConfig } from "../../saveGuildConfig";
 import { WelcomeSkeleton } from "@/src/components/DashboardSkeleton";
 
 export default function ServerWelcomePage() {
-    const { guild, updateGuild } = useContext(GuildContext);
+    const guildId = useParams().guildId as string;
+    const { data, mutate } = useGuildWelcome(guildId);
     const router = useRouter();
 
     const [changePopup, setChangePopup] = useState<boolean | null>(null);
@@ -27,14 +28,15 @@ export default function ServerWelcomePage() {
     const [goodMessages, setGoodMessages] = useState<RESTPostAPIChannelMessageJSONBody[]>([{}, {}]);
 
     useEffect(() => {
-        if (guild?.database?.config?.welcomeSetting) {
-            const ws = guild.database.config.welcomeSetting;
+        if (changePopup) return;
+        if (data?.welcomeSetting) {
+            const ws = data.welcomeSetting;
             setWelMessages([ws.welcome?.channel?.message || {}, ws.welcome?.user?.message || {}]);
             setWelcomeStatus([ws.welcome?.isEnabled || false, ws.welcome?.channel?.isEnabled || false, ws.welcome?.user?.isEnabled || false]);
             setGoodMessages([ws.goodbye?.channel?.message || {}, ws.goodbye?.user?.message || {}]);
             setGoodbyeStatus([ws.goodbye?.isEnabled || false, ws.goodbye?.channel?.isEnabled || false, ws.goodbye?.user?.isEnabled || false]);
         }
-    }, [guild]);
+    }, [data, changePopup]);
 
     useEffect(() => {
         const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -50,7 +52,7 @@ export default function ServerWelcomePage() {
         };
     }, [changePopup]);
 
-    if (!guild) return <WelcomeSkeleton />;
+    if (!data) return <WelcomeSkeleton />;
 
     type messageChangeType = 'wel' | 'good' | 'send';
     const handleMessageChange = (
@@ -107,13 +109,13 @@ export default function ServerWelcomePage() {
     };
 
     const buttonSaveChange = async (type: 'save' | 'cancel') => {
-        const guildConfig = guild?.database?.config;
+        const guildConfig = data;
         const eWelcome = document.querySelector('div[id="welcome"]') as HTMLDivElement;
         const eGoodbye = document.querySelector('div[id="goodbye"]') as HTMLDivElement;
         const eWChannel = eWelcome?.querySelector('select[name="channel"]') as HTMLSelectElement;
         const eGChannel = eGoodbye?.querySelector('select[name="channel"]') as HTMLSelectElement;
 
-        if (eWChannel && eGChannel && guild) {
+        if (eWChannel && eGChannel && data) {
             if (type === 'cancel') {
                 eWChannel.value = guildConfig?.welcomeSetting?.welcome?.channel?.id || '';
                 setWelMessages([guildConfig?.welcomeSetting?.welcome?.channel?.message || {}, guildConfig?.welcomeSetting?.welcome?.user?.message || {}]);
@@ -128,7 +130,7 @@ export default function ServerWelcomePage() {
                 setSavingChangesLoading(true);
 
                 const newGuildConfig: GuildConfig = {
-                    guildId: guild.id,
+                    guildId,
                     welcomeSetting: {
                         welcome: {
                             isEnabled: welcomeStatus[0],
@@ -165,16 +167,7 @@ export default function ServerWelcomePage() {
                     setTimeout(() => {
                         const e = document.getElementById('statusSavingText');
                         if (e) e.textContent = saveStatus.statusText;
-                        updateGuild({
-                            ...guild,
-                            database: {
-                                ...guild.database,
-                                config: {
-                                    ...guild.database.config,
-                                    welcomeSetting: { ...newGuildConfig.welcomeSetting }
-                                }
-                            }
-                        });
+                        mutate({ ...data, welcomeSetting: { ...newGuildConfig.welcomeSetting } }, { revalidate: false });
                     }, 500);
 
                     setTimeout(() => {
@@ -227,8 +220,8 @@ export default function ServerWelcomePage() {
                                 <div>
                                     <div id="channel">
                                         <h5>Channel</h5>
-                                        <Select translate="no" name="channel" defaultValue={guild.database?.config?.welcomeSetting?.welcome?.channel?.id || undefined} onChange={() => setChangePopup(true)}>
-                                            {guild.data.channels?.filter((channel) => textChannelTypes.includes(channel.type)).map((channel) => (
+                                        <Select translate="no" name="channel" defaultValue={data?.welcomeSetting?.welcome?.channel?.id || undefined} onChange={() => setChangePopup(true)}>
+                                            {data.channels?.filter((channel) => textChannelTypes.includes(channel.type)).map((channel) => (
                                                 <option key={channel.id} value={channel.id}>{channel.name}</option>
                                             ))}
                                         </Select>
@@ -236,7 +229,7 @@ export default function ServerWelcomePage() {
                                 </div>
                                 {(() => {
                                     const index: number = 0;
-                                    const tier = guild.database?.membership?.tier || 'free';
+                                    const tier = data.tier || 'free';
                                     const limits = typeof tier === 'number' ? welcome_limits[index === 0 ? 'c' : 'u'][`tier${tier}` as keyof typeof welcome_limits.c] : welcome_limits[index === 0 ? 'c' : 'u'].free;
                                     const isLimit = (e: keyof typeof limits) => {
                                         switch (e) {
@@ -308,7 +301,7 @@ export default function ServerWelcomePage() {
                             <div id="message">
                                 {(() => {
                                     const index: number = 1;
-                                    const tier = guild.database?.membership?.tier || 'free';
+                                    const tier = data.tier || 'free';
                                     const limits = typeof tier === 'number' ? welcome_limits[index === 0 ? 'c' : 'u'][`tier${tier}` as keyof typeof welcome_limits.u] : welcome_limits[index === 0 ? 'c' : 'u'].free;
                                     const isLimit = (e: keyof typeof limits) => {
                                         switch (e) {
@@ -397,8 +390,8 @@ export default function ServerWelcomePage() {
                                 <div>
                                     <div id="channel">
                                         <h5>Channel</h5>
-                                        <Select translate="no" name="channel" defaultValue={guild.database?.config?.welcomeSetting?.goodbye?.channel?.id || undefined} onChange={() => setChangePopup(true)}>
-                                            {guild.data.channels?.filter((channel) => textChannelTypes.includes(channel.type)).map((channel) => (
+                                        <Select translate="no" name="channel" defaultValue={data?.welcomeSetting?.goodbye?.channel?.id || undefined} onChange={() => setChangePopup(true)}>
+                                            {data.channels?.filter((channel) => textChannelTypes.includes(channel.type)).map((channel) => (
                                                 <option key={channel.id} value={channel.id}>{channel.name}</option>
                                             ))}
                                         </Select>
@@ -406,7 +399,7 @@ export default function ServerWelcomePage() {
                                 </div>
                                 {(() => {
                                     const index: number = 0;
-                                    const tier = guild.database?.membership?.tier || 'free';
+                                    const tier = data.tier || 'free';
                                     const limits = typeof tier === 'number' ? welcome_limits[index === 0 ? 'c' : 'u'][`tier${tier}` as keyof typeof welcome_limits.c] : welcome_limits[index === 0 ? 'c' : 'u'].free;
                                     const isLimit = (e: keyof typeof limits) => {
                                         switch (e) {
@@ -436,7 +429,7 @@ export default function ServerWelcomePage() {
                                                 <h5>Message</h5>
                                                 <TextLimit id="message" $isLimit={isLimit('content')} $textbg="unset">
                                                     <DiscordFormatterWrapper>
-                                                        <TextArea onChange={(t) => { handleMessageChange('good', index, { content: t.target.value }); setChangePopup(true); }} defaultValue={guild.database?.config?.welcomeSetting?.goodbye?.channel?.message?.content || undefined} value={goodMessages[index]?.content || ''} maxLength={discord_limits.content} />
+                                                        <TextArea onChange={(t) => { handleMessageChange('good', index, { content: t.target.value }); setChangePopup(true); }} defaultValue={data?.welcomeSetting?.goodbye?.channel?.message?.content || undefined} value={goodMessages[index]?.content || ''} maxLength={discord_limits.content} />
                                                     </DiscordFormatterWrapper>
                                                     <div id="count">{(limits.content - (goodMessages[index]?.content?.length || 0)) <= 50 && limits.content - (goodMessages[index]?.content?.length || 0)}</div>
                                                     <div id="text">{(limits.content - (goodMessages[index]?.content?.length || 0)) <= 50 && <>Unlock the limits with <span onClick={() => router.push(`/dashboard/server/premium`)}>Premium</span></>}</div>
@@ -478,7 +471,7 @@ export default function ServerWelcomePage() {
                             <div id="message">
                                 {(() => {
                                     const index: number = 1;
-                                    const tier = guild.database?.membership?.tier || 'free';
+                                    const tier = data.tier || 'free';
                                     const limits = typeof tier === 'number' ? welcome_limits[index === 0 ? 'c' : 'u'][`tier${tier}` as keyof typeof welcome_limits.u] : welcome_limits[index === 0 ? 'c' : 'u'].free;
                                     const isLimit = (e: keyof typeof limits) => {
                                         switch (e) {

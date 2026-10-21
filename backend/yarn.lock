@@ -4637,13 +4637,13 @@ __metadata:
 
 "global@file:../global::locator=backend%40workspace%3A.":
   version: 0.0.0
-  resolution: "global@file:../global#../global::hash=f63df1&locator=backend%40workspace%3A."
+  resolution: "global@file:../global#../global::hash=5b19d1&locator=backend%40workspace%3A."
   dependencies:
     dotenv: "npm:^17.0.1"
     nodemailer: "npm:^7.0.5"
     reflect-metadata: "npm:^0.2.2"
     typeorm: "npm:^0.3.25"
-  checksum: 10c0/b35f2cb9c2138327dbc2c2fd0825d27bdcb112ab01532e345f5000777a3f123a20716c4e4863fbef7fc4a7aaa5a041e7522a8dbb36b946cce40c9c0149f0db6b
+  checksum: 10c0/6a2001558232aa9e5de25fb2a8ec1dce121fcdca6a50143df5bd23b20cfb95f50cc9977f0b465756ff0afc0a9d14aad5947cb6feeed8872049c4a35fb9eaaa05
   languageName: node
   linkType: hard
 

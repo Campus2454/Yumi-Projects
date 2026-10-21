@@ -9,12 +9,12 @@ import { useState, useContext, useRef, useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { GuildContext, UserContext } from "@/src/utils/contexts/Contexts";
 import { DashCategoryMenu, DashSidebar as StyleDashSidebar } from "@/src/utils/styles";
-import { MapGuildsContext } from "@/src/utils/contexts/Contexts";
+import { useGuildList } from "@/src/utils/hooks/useGuildData";
 
 export default function DashSidebar() {
   const { guild } = useContext(GuildContext);
   const { user: profile } = useContext(UserContext);
-  const { guilds } = useContext(MapGuildsContext);
+  const { guilds } = useGuildList();
   const pathname = usePathname();
   const router = useRouter();
   const dashboardType = pathname.startsWith('/dashboard/server') ? 'server'
