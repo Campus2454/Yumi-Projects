@@ -22,7 +22,8 @@ export default function ServerLayoutClient({ children }: { children: React.React
 
     useEffect(() => {
         if (!error) return;
-        setErrorPopup({ title: 'Loading Guild Error', message: `${error}`, show: true });
+        // setErrorPopup({ title: 'Loading Guild Error', message: `${error}`, show: true });
+        console.log('Loading Guild Error:', error);
         router.push(`/dashboard?to=server/${guildId}`);
     }, [error]);
 

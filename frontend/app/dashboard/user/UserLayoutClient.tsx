@@ -14,12 +14,13 @@ export default function UserLayoutClient({ children }: { children: React.ReactNo
         if (!loadingUser && !profile) {
             const sub = pathname.split('/')[3] || '';
             const path = `/dashboard?to=user/${sub}`;
-            if (userError) {
-                setErrorPopup({ title: 'Loading User Error', message: `${userError}`, show: true });
-            }
+            // if (userError) {
+            //     setErrorPopup({ title: 'Loading User Error', message: `${userError}`, show: true });
+            // }
+            console.log('Loading User Error:', userError);
             router.push(path);
         }
-    }, [profile, loadingUser, userError, pathname, router, setErrorPopup]);
+    }, [profile, loadingUser, userError, pathname, router]);
 
     useEffect(() => {
         if (profile) {
