@@ -1,25 +1,50 @@
-FROM node:18-alpine
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-RUN apk add --no-cache wget
+RUN apk add --no-cache libc6-compat wget
 RUN corepack enable && corepack prepare yarn@4.11.0 --activate
 
-# Copy ทั้ง global และ status
+COPY package.json yarn.lock* .yarnrc.yml ./
 COPY global ./global
-COPY status/package.json status/yarn.lock* ./status/
-WORKDIR /app/status
+COPY status ./status
 
-# ติดตั้ง dependencies
 RUN yarn install
 
-# Copy source code ทั้งหมด
-COPY status/. .
+WORKDIR /app/global
 
+RUN yarn install
+RUN yarn build
+
+WORKDIR /app/status
+
+ENV NODE_ENV=production
+
+RUN yarn install
+RUN yarn build
+
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+RUN apk add --no-cache libc6-compat wget
+RUN corepack enable && corepack prepare yarn@4.11.0 --activate
+
+COPY global ./global
+COPY status ./status
+
+WORKDIR /app/status
+
+ENV NODE_ENV=production
 ENV FORCE_COLOR=1
 ENV TERM=xterm-256color
 ENV PORT=3006
 ENV HOST=0.0.0.0
+
+RUN yarn install
+
+COPY --from=builder /app/status/dist ./dist
+
 EXPOSE 3006
 
 HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \

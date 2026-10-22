@@ -2032,13 +2032,13 @@ __metadata:
 
 "global@file:../global::locator=status%40workspace%3A.":
   version: 0.0.0
-  resolution: "global@file:../global#../global::hash=e02c7d&locator=status%40workspace%3A."
+  resolution: "global@file:../global#../global::hash=5b19d1&locator=status%40workspace%3A."
   dependencies:
     dotenv: "npm:^17.0.1"
     nodemailer: "npm:^7.0.5"
     reflect-metadata: "npm:^0.2.2"
     typeorm: "npm:^0.3.25"
-  checksum: 10c0/f59d537201a0f7d9be174b398fecc5130c18e4bf398b524883a3498f3b3c1688707c57d3b320883ce6dcda79deb1b6525425afc4620b15b1c7a1c06c1aacf18c
+  checksum: 10c0/6a2001558232aa9e5de25fb2a8ec1dce121fcdca6a50143df5bd23b20cfb95f50cc9977f0b465756ff0afc0a9d14aad5947cb6feeed8872049c4a35fb9eaaa05
   languageName: node
   linkType: hard
 
