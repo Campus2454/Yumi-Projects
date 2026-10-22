@@ -53,8 +53,8 @@ export class PaymentService {
         payment_method_types: ['card'],
         mode: 'subscription',
         line_items: [{ price: priceId, quantity: 1 }],
-        success_url: 'https://camming.xyz/dashboard?to=user/premium',
-        cancel_url: 'https://camming.xyz/',
+        success_url: 'https://yumistack.net/dashboard?to=user/premium',
+        cancel_url: 'https://yumistack.net/',
         metadata: {
           userId: userId,
           orderId: priceId,

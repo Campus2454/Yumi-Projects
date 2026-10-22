@@ -17,7 +17,7 @@ export class AuthController {
     @Get('redirect')
     @UseGuards(DiscordAuthGuardDomain)
     redirect(@Res() res: Response) {
-        res.redirect(`${process.env.WEB_DOMAIN}/dashboard`);
+        res.redirect(`${process.env.WEB_DOMAIN}/login_fallback`);
     }
 
     @Get('status')
@@ -75,7 +75,7 @@ export class AuthV2Controller {
     @Get('redirect')
     @UseGuards(DiscordAuthGuardLocalhost)
     redirect(@Res() res: Response) {
-        res.redirect(`${process.env.WEB_IP}/dashboard`);
+        res.redirect(`${process.env.WEB_IP}/login_fallback`);
     }
 
     @Get('status')
