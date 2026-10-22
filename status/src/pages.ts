@@ -122,6 +122,9 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .inc{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 16px;padding:14px 0}.inc+.inc{border-top:1px solid rgba(255,255,255,.07)}
 .inc .w{color:var(--muted);font-weight:300;font-size:.92rem}.inc .d{font-weight:600;font-variant-numeric:tabular-nums}.inc .d.on{color:var(--down)}
 .none{color:var(--muted);font-weight:300}
+.links{display:flex;flex-wrap:wrap;justify-content:center;gap:10px 22px;margin-top:16px;font-size:.92rem}
+.links a{color:var(--muted);text-decoration:underline;text-underline-offset:4px}
+.links a:hover{color:var(--ink)}
 .foot{margin-top:28px;text-align:center;color:var(--dim);font-size:.82rem;font-weight:300}
 @media (max-width:720px){
 	.svc{grid-template-columns:1fr auto;gap:14px}.svc .bars{grid-column:1/-1;order:3}
@@ -252,7 +255,8 @@ ${n ? `<section class="list glass">${rows}</section>` : ''}
 	<span><i style="background:var(--warn)"></i>ล่มน้อยกว่า 5 นาที</span>
 	<span><i style="background:var(--down)"></i>ล่มนานกว่านั้น</span>
 	<span><i style="background:rgba(255,255,255,.12)"></i>ไม่มีข้อมูล</span>
-</div>`;
+</div>
+${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กราฟ CPU / RAM / Ping</a><a href="/subscribe">รับการแจ้งเตือนทางอีเมล</a></nav>`}`;
 	return shell('Yumi - สถานะระบบ', embed ? '' : brand, main, overall.key, embed);
 }
 
