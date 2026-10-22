@@ -1,13 +1,13 @@
-import { StatusData } from 'global/types';
+import { StatusData } from "global/types";
 import axios from "axios";
-import mysql from 'mysql2/promise';
-import { sendEmailAlert } from 'global/backend-functions';
-import https from 'https';
+import mysql from "mysql2/promise";
+import { sendEmailAlert } from "global/backend-functions";
+import https from "https";
 
 const mailText = {
-	default: 'สถานะการทำงานของ Camming',
-	online: 'แจ้งเตือนสถานะการทำงาน: เซิร์ฟเวอร์ทำงานปกติ',
-	error: 'แจ้งเตือนสถานะการทำงาน: เซิร์ฟเวอร์ทำงานผิดปกติ'
+	default: `สถานะการทำงานของ Yumi`,
+	online: `แจ้งเตือนสถานะการทำงาน: เซิร์ฟเวอร์ทำงานปกติ`,
+	error: `แจ้งเตือนสถานะการทำงาน: เซิร์ฟเวอร์ทำงานผิดปกติ`
 };
 
 const httpsAgent = new https.Agent({ family: 4 });
@@ -22,10 +22,10 @@ export async function checkAll(send2mail: boolean = true) {
 
 export async function bot_main(send2mail: boolean = true): Promise<StatusData> {
   try{
-    const res = await axios.get<StatusData>('http://localhost:30061/');
+    const res = await axios.get<StatusData>(`http://${process.env.LOCALHOST}:30061/`);
 		// console.info(res.data);
     const loadData = res.data;
-		if(!loadData || !loadData.name || !loadData.status)throw 'no data';
+		if(!loadData || !loadData.name || !loadData.status)throw `no data`;
 
     return {
       name: loadData.name,
@@ -40,9 +40,9 @@ export async function bot_main(send2mail: boolean = true): Promise<StatusData> {
   }catch(err){
 		const m = `ไม่สามารถเชื่อมต่อบอทหลักได้: ${err}`;
 		console.error(m);
-		if(send2mail){sendEmailAlert('thirphathrphlphun@gmail.com', mailText.error, m)};
+		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
     return {
-      name: 'bot',
+      name: `bot`,
       status: 0,
       ping: undefined,
       uptime: undefined,
@@ -64,7 +64,7 @@ export async function getDatabasePing(send2mail: boolean = true) {
 		});
 
 		const start = Date.now();
-		await connection.query('SELECT 1');
+		await connection.query(`SELECT 1`);
 		const ping = Date.now() - start;
 
 		await connection.end();
@@ -72,17 +72,17 @@ export async function getDatabasePing(send2mail: boolean = true) {
 	}catch(error){
 		const m = `ไม่สามารถเชื่อมต่อฐานข้อมูลได้: ${error}`;
 		console.error(m);
-		if(send2mail){sendEmailAlert('thirphathrphlphun@gmail.com', mailText.error, m)};
+		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
 		return undefined;
 	}
 };
 
 export async function backend(send2mail: boolean = true): Promise<StatusData> {
 	try{
-    const res = await axios.get<StatusData>('http://localhost:30063/');
+    const res = await axios.get<StatusData>(`http://${process.env.LOCALHOST}:30063/`);
 		// console.info(res.data);
     const loadData = res.data;
-		if(!loadData || !loadData.name || !loadData.status)throw 'no data';
+		if(!loadData || !loadData.name || !loadData.status)throw `no data`;
 
     return {
       name: loadData.name,
@@ -97,9 +97,9 @@ export async function backend(send2mail: boolean = true): Promise<StatusData> {
   }catch(err){
 		const m = `ไม่สามารถเชื่อมต่อbackendได้: ${err}`;
 		console.error(m);
-		if(send2mail){sendEmailAlert('thirphathrphlphun@gmail.com', mailText.error, m)};
+		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
     return {
-      name: 'backend',
+      name: `backend`,
       status: 0,
       ping: undefined,
       uptime: undefined,
@@ -114,24 +114,24 @@ export async function backend(send2mail: boolean = true): Promise<StatusData> {
 export async function frontend_main(send2mail: boolean = true): Promise<StatusData> {
 	const startTime = Date.now();
 	try{
-    const res = await axios.get('https://yumistack.net/', { httpsAgent });
+    const res = await axios.get(`https://yumistack.net/`, { httpsAgent });
 
     return {
-      name: 'frontend_main',
+      name: `frontend_main`,
       status: res.status == 200 ? 1 : 0,
       ping: (Date.now() - startTime),
       uptime: undefined,
       startTime: undefined,
-      host: 'https://yumistack.net/',
+      host: `https://yumistack.net/`,
       version: undefined,
       resources: undefined
     };
   }catch(err){
 		const m = `ไม่สามารถเชื่อมต่อเว็บไซต์หลักได้: ${err}`;
 		console.error(m);
-		if(send2mail){sendEmailAlert('thirphathrphlphun@gmail.com', mailText.error, m)};
+		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
     return {
-      name: 'frontend_main',
+      name: `frontend_main`,
       status: 0,
       ping: undefined,
       uptime: undefined,
@@ -145,8 +145,8 @@ export async function frontend_main(send2mail: boolean = true): Promise<StatusDa
 
 export async function database(send2mail: boolean = true): Promise<StatusData> {
 	const startTime = Date.now();
-  const version = '0.2';
-  const name = 'database';
+  const version = `0.2`;
+  const name = `database`;
 	try{
 		const connection = await mysql.createConnection({
 			host: process.env.MYSQL_DB_HOST,
@@ -156,16 +156,16 @@ export async function database(send2mail: boolean = true): Promise<StatusData> {
 		});
 
 		// const start = Date.now();
-		// await connection.query('SELECT 1');
+		// await connection.query(`SELECT 1`);
 		// const ping = Date.now() - start;
     // await connection.ping();
 
-    const uptime = await connection.query('SHOW STATUS LIKE "Uptime"') as mysql.RowDataPacket[];
+    const uptime = await connection.query(`SHOW STATUS LIKE "Uptime"`) as mysql.RowDataPacket[];
     const uptimeSeconds = parseInt(uptime[0][0]?.Value);
 
 		await connection.end();
 
-    if(isNaN(uptimeSeconds))throw 'Invalid Uptime value';
+    if(isNaN(uptimeSeconds))throw `Invalid Uptime value`;
 
     return {
       name,
@@ -173,13 +173,13 @@ export async function database(send2mail: boolean = true): Promise<StatusData> {
       ping: (Date.now() - startTime),
       uptime: uptimeSeconds,
       startTime: new Date(Date.now() - uptimeSeconds * 1000).toISOString(),
-      host: 'https://yumistack.net/',
+      host: `https://yumistack.net/`,
       version
     };
   }catch(err){
 		const m = `ไม่สามารถเชื่อมต่อฐานข้อมูลได้: ${err}`;
 		console.error(m);
-		if(send2mail){sendEmailAlert('thirphathrphlphun@gmail.com', mailText.error, m)};
+		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
     return {
       name,
       status: 0,
