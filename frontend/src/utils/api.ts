@@ -2,6 +2,8 @@ import axios, { AxiosRequestConfig } from 'axios';
 import { PartialGuild, AuthStatus, Commands } from './types';
 import { GuildInfoDTO, GuildOverviewDTO, GuildSettingsDTO, GuildWelcomeDTO } from 'global';
 import { APIGuildChannel, ChannelType } from 'discord-api-types/v10';
+import Cookies from 'js-cookie';
+import { Router } from 'next/router';
 
 const CONFIG: AxiosRequestConfig = {
   withCredentials: true,
@@ -43,3 +45,4 @@ export const getGuildInfo = (guildId: string) => getGuildPage<GuildInfoDTO>(guil
 export const getGuildOverview = (guildId: string) => getGuildPage<GuildOverviewDTO>(guildId, 'overview');
 export const getGuildSettings = (guildId: string) => getGuildPage<GuildSettingsDTO>(guildId, 'settings');
 export const getGuildWelcome = (guildId: string) => getGuildPage<GuildWelcomeDTO>(guildId, 'welcome');
+

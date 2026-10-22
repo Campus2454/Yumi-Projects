@@ -19,6 +19,7 @@ import { Turnstile } from "@marsidev/react-turnstile";
 import { Spinner_ring } from "./Spinner";
 import { useHideLoading } from "../utils/hooks/useHideLoading";
 import Link from "next/link";
+import { LoginDiscord } from "./DashSections";
 
 // type UserContextType = {
 //     user?: AuthStatus;
@@ -246,12 +247,7 @@ export const AppBar = () => {
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', }}>
-                            <Link href={`/verify?redirect=${typeof window !== 'undefined' && window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME 
-                                    ? `${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/login` 
-                                    : `${process.env.NEXT_PUBLIC_API_IP_URL}/auth/v2/login`
-                            }`} style={{ display: "flex", justifyContent: "center", alignItems: "center", cursor: "pointer", backgroundColor: isAdminPage ? '#db5757' : "#5973d4", width: 100, height: 40, borderRadius: 5, }}>
-                                Login
-                            </Link>
+                            <LoginDiscord display="flex" justifyContent="center" alignItems="center" cursor="pointer" backgroundColor={isAdminPage ? '#db5757' : "#5973d4"} width={100} height={40} borderRadius={5} />
 
                             <div className="barshortcut" style={{ marginRight: 20, }}/>
                             <div className="hamburger barshortcut" onClick={toggleMenu} style={{ alignItems: "center", }}>

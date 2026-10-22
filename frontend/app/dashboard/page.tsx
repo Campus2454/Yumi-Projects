@@ -17,6 +17,7 @@ import { TbRefresh } from "react-icons/tb";
 import Link from 'next/link';
 import { Spinner_ring } from '@/src/components/Spinner';
 import { FullLayoutSkeleton } from '@/src/components/DashboardSkeleton';
+import { LoginDiscord } from '@/src/components/DashSections';
 // import { wait } from "@testing-library/user-event/dist/utils";
 
 function MenuPageContent() {
@@ -163,11 +164,7 @@ function MenuPageContent() {
                     </NotFoundImg>
                     <NotFoundText style={{ display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
                         <h1>Please login</h1>
-                        <Link href={`/verify?redirect=${window.location.hostname == hostname 
-                                    ? `${apiDomain}/auth/login`
-                                    : `${apiIp}/auth/v2/login`
-                            }`}
-                            style={{ color: '#fff', textDecoration: 'none', backgroundColor: '#4d7cff', padding: '10px 40px', borderRadius: 5, marginTop: 10, cursor: 'pointer', }}>Login</Link>
+                        <LoginDiscord display="flex" justifyContent="center" alignItems="center" cursor="pointer" backgroundColor="#4d7cff" width={100} height={40} borderRadius={5} />
                         <p style={{ margin: '0' }}>or</p>
                         <Link href='/' style={{ color: '#fff', textDecoration: 'none', backgroundColor: '#ff3333', padding: 10, borderRadius: 5, }}>Back to Home Page</Link>
                     </NotFoundText>
@@ -194,11 +191,7 @@ function MenuPageContent() {
                 <NotFoundText style={{ display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
                     <h2 style={{ margin: '0' }}>Not Found</h2>
                     <p style={{ margin: '0' }}>{errorGuilds}</p>
-                    <Link href={`/verify?redirect=${window.location.hostname == hostname 
-                                    ? `${apiDomain}/auth/login`
-                                    : `${apiIp}/auth/v2/login`
-                        }`}
-                        style={{ color: '#fff', textDecoration: 'none', backgroundColor: '#4d7cff', padding: '10px 40px', borderRadius: 5, marginTop: 10, cursor: 'pointer', }}>Login</Link>
+                    <LoginDiscord color='#fff' textDecoration='none' backgroundColor='#4d7cff' padding='10px 40px' borderRadius={5} marginTop={10} cursor='pointer' />
                     <p style={{ margin: '0' }}>or</p>
                     <Link href='/' style={{ color: '#fff', textDecoration: 'none', backgroundColor: '#ff3333', padding: 10, borderRadius: 5, }}>Back to Home Page</Link>
                 </NotFoundText>
@@ -223,11 +216,7 @@ function MenuPageContent() {
             </NotFoundImg>
             <NotFoundText style={{ display: 'flex', alignItems: 'center', flexDirection: 'column' }}>
                 <h2 style={{ margin: '0' }}>Not Found</h2>
-                <Link href={window.location.hostname == hostname 
-                                    ? `${apiDomain}/auth/login`
-                                    : `${apiIp}/auth/v2/login`
-                    }
-                    style={{ color: '#fff', textDecoration: 'none', backgroundColor: '#4d7cff', padding: '10px 40px', borderRadius: 5, marginTop: 10, cursor: 'pointer', }}>Login</Link>
+                <LoginDiscord display="flex" justifyContent="center" alignItems="center" cursor="pointer" backgroundColor="#4d7cff" width={100} height={40} borderRadius={5} />
                 <p style={{ margin: '0' }}>or</p>
                 <Link href='/' style={{ color: '#fff', textDecoration: 'none', backgroundColor: '#ff3333', padding: 10, borderRadius: 5, }}>Back to Home Page</Link>
             </NotFoundText>

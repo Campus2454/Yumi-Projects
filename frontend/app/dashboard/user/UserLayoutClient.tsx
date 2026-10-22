@@ -6,6 +6,7 @@ import { BackgroundFixed, DashPage, DashPanel } from "@/src/utils/styles";
 import { useState } from "react";
 import Link from "next/link";
 import { BsExclamationTriangle } from "react-icons/bs";
+import { LoginDiscord } from "@/src/components/DashSections";
 
 export default function UserLayoutClient({ children }: { children: React.ReactNode }) {
     const { user: profile, loadingUser, userError } = useContext(UserContext);
@@ -88,12 +89,7 @@ export default function UserLayoutClient({ children }: { children: React.ReactNo
                             transitionDelay: '0.1s',
                         }}>
                             <div style={{ fontSize: 20, fontWeight: 'bold', padding: '0 50px' }}>Please log in first.</div>
-                            <Link href={`/verify?redirect=${typeof window !== 'undefined' && window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME 
-                                    ? `${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/login` 
-                                    : `${process.env.NEXT_PUBLIC_API_IP_URL}/auth/v2/login`
-                            }`} style={{ display: "flex", justifyContent: "center", alignItems: "center", cursor: "pointer", backgroundColor: "#5973d4", width: 100, height: 40, borderRadius: 5, }}>
-                                Login
-                            </Link>
+                            <LoginDiscord display="flex" justifyContent="center" alignItems="center" cursor="pointer" backgroundColor="#5973d4" width={100} height={40} borderRadius={5} />
                         </div>
                     </div>
                 </>}

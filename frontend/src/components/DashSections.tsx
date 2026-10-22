@@ -18,6 +18,7 @@ import {
 import { PartialGuild, User, localeLabels } from '../utils/types';
 import { getAvatarURL, getIconURL } from '../utils/getURL';
 import { useGuildList } from '../utils/hooks/useGuildData';
+import Cookies from 'js-cookie';
 
 const origin = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -880,5 +881,22 @@ export function UserOverview({ profile, guilds, loadingGuilds = false }: { profi
       </DashTwoColumns>
       <ManagedServers guilds={guilds} loading={guildsLoading} />
     </DashContainer>
+  );
+}
+
+export function LoginDiscord({ display = "flex", justifyContent = "center", alignItems = "center", cursor = "pointer", backgroundColor = "#5973d4", width = 100, height = 40, borderRadius = 5, ...props }: React.CSSProperties) {
+  const path = `/verify?redirect=${typeof window !== 'undefined' && window.location.hostname == process.env.NEXT_PUBLIC_HOSTNAME ? `${process.env.NEXT_PUBLIC_API_DOMAIN}/auth/login` : `${process.env.NEXT_PUBLIC_API_IP_URL}/auth/v2/login`}`
+
+  function login(e: React.MouseEvent) {
+    e.preventDefault();
+    const to = window.location.pathname;
+    Cookies.set('discord_login_redirect', to, { expires: 1, path: '/', sameSite: 'lax' });
+    window.location.href = path;
+  };
+
+  return (
+    <Link href={path} onClick={login} style={{ display, justifyContent, alignItems, cursor, backgroundColor, width, height, borderRadius, ...props }}>
+      Login
+    </Link>
   );
 }
