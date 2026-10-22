@@ -2,10 +2,10 @@ import { capitalize } from 'global/common-functions';
 
 /** ชื่อแสดงผลภาษาไทยของแต่ละ service (ถ้าไม่อยู่ในรายการจะใช้ชื่อเดิมจัดรูปแบบให้) */
 const NAMES_TH: Record<string, string> = {
-	bot: 'บอทหลัก',
-	backend: 'แบ็กเอนด์',
-	frontend_main: 'เว็บไซต์หลัก',
-	database: 'ฐานข้อมูล',
+	bot: 'Main Bot',
+	backend: 'Backend',
+	frontend_main: 'Website',
+	database: 'Database',
 };
 export const displayName = (n: string) => NAMES_TH[n] ?? capitalize(n.split('_').join(' '));
 
