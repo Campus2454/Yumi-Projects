@@ -9,4 +9,29 @@ services:
       - '3006:3006'
     extra_hosts:
       - 'host.docker.internal:host-gateway'
+    environment:
+      DATABASE_URL: postgres://status:${STATUS_DB_PASSWORD}@db:5432/status
+      STATUS_DB_SSL: 'false'
+    depends_on:
+      db:
+        condition: service_healthy
     restart: always
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: status
+      POSTGRES_PASSWORD: ${STATUS_DB_PASSWORD}
+      POSTGRES_DB: status
+    volumes:
+      - status-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U status -d status']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: always
+    # ไม่มี ports: เพื่อไม่ให้เปิด 5432 ออกอินเทอร์เน็ต
+
+volumes:
+  status-pg:
