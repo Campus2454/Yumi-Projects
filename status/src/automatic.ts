@@ -118,7 +118,7 @@ const shell = (title: string, body: string, state = '') => `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="theme-color" content="#0c0506" />
 <title>${title}</title>
-<link rel="icon" href="https://assets.camming.xyz/photos/logo/CammingLogo.webp" />
+<link rel="icon" href="https://assets.yumistack.net/photos/logo/yumi/001.webp" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet" />
@@ -156,9 +156,9 @@ export function renderIndex(list: StatusData[]): string {
 </a>`;
 	}).join('\n');
 
-	return shell('Camming - Status', `
+	return shell('Yumi - Status', `
 <header class="top">
-	<div class="brand"><img src="https://assets.camming.xyz/photos/logo/CammingLogo.webp" alt="" />Camming Status</div>
+	<div class="brand"><img src="https://assets.yumistack.net/photos/logo/yumi/001.webp" alt="" />Yumi Status</div>
 </header>
 <section class="banner" data-state="${overall.key}">
 	<span class="dot" style="width:14px;height:14px"></span>
@@ -173,13 +173,13 @@ export function renderDetail(s: StatusData): string {
 	const st = stateOf(s.status);
 	const na = (v: unknown, f: (x: any) => string) => (v ? `<div class="v">${esc(f(v))}</div>` : '<div class="v na">N/A</div>');
 
-	return shell(`Camming - Status (${esc(s.name)})`, `
+	return shell(`Yumi - Status (${esc(s.name)})`, `
 <header class="top">
 	<div class="btns">
 		<a class="btn" href="/" target="_top" aria-label="Back to all services">${ICON.back}</a>
 		<button class="btn" onclick="location.reload()" aria-label="Refresh">${ICON.refresh}</button>
 	</div>
-	<div class="brand"><img src="https://assets.camming.xyz/photos/logo/CammingLogo.webp" alt="" />Camming</div>
+	<div class="brand"><img src="https://assets.yumistack.net/photos/logo/yumi/001.webp" alt="" />Yumi</div>
 </header>
 <section class="hero">
 	<div class="beacon"><div class="core">${ICON[st.key as 'ok' | 'load' | 'down']}</div></div>
@@ -196,7 +196,7 @@ export function renderDetail(s: StatusData): string {
 
 /** 404 */
 export function renderNotFound(name: string): string {
-	return shell('Camming - Status', `
+	return shell('Yumi - Status', `
 <header class="top">
 	<div class="btns"><a class="btn" href="/" target="_top" aria-label="Back to all services">${ICON.back}</a></div>
 </header>
