@@ -89,7 +89,7 @@ export async function send(to_discord: boolean = true, to_mail: boolean = true, 
 	}
 	if (!list.length) return;
 
-	const items: MailItem[] = list.map(s => ({ s, b: getBrief(s) }));
+	const items: MailItem[] = await Promise.all(list.map(async s => ({ s, b: await getBrief(s) })));
 	const tasks: Promise<unknown>[] = [];
 	if (to_discord) tasks.push(sendDiscord(items, full).catch(e => console.error('ไม่สามารถส่งข้อความไปที่ Discord ได้:', e)));
 	if (to_mail) tasks.push(sendStatusMail(items, full ? 'daily' : 'change').catch(e => console.error('ไม่สามารถส่งอีเมลได้:', e)));

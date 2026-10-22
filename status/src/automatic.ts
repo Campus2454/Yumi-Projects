@@ -1,8 +1,10 @@
 import cron from 'node-cron';
 import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
-import { recordStatus, getReport, getBrief, parseRange } from './history.js';
+import { recordStatus, getReport, getBrief, parseRange, initHistory } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
+import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSubscribers } from './subscribers.js';
+import { renderSubscribePage, renderConfirmResult, renderUnsubResult } from './subscribe-page.js';
 import chalk from 'chalk';
 import { StatusData } from 'global/types';
 import express from 'express';
@@ -20,7 +22,7 @@ async function checkAll() {
 		allS = await _checkAll(false);
 
 		// บันทึก timeline (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
-		try{ recordStatus(allS); }catch(e){ console.error('บันทึกประวัติสถานะไม่สำเร็จ:', e); }
+		recordStatus(allS);
 
 		changedStatus = allS.filter(current => {
 			const prevStatus = prevS.find(s => s.name === current.name)?.status;
@@ -39,18 +41,34 @@ async function checkAll() {
 		prevS = [...allS];
 	}
 };
-(async () => {
-	while(true){
-		try{
-			await checkAll();
-		}catch(e){
-			console.error(e);
+function startWatcher() {
+	(async () => {
+		while(true){
+			try{
+				await checkAll();
+			}catch(e){
+				console.error(e);
+			}
+			await new Promise(res => setTimeout(res, 1000));
 		}
-		await new Promise(res => setTimeout(res, 1000));
-	}
-})();
+	})();
+}
 
-app.use((req, res, next) => {
+app.use(express.json({ limit: '2kb' }));
+
+// rate limit ต่อ IP สำหรับการขอสมัคร (กัน spam และการยิงอีเมลรัว ๆ)
+const hits = new Map<string, number[]>();
+const WINDOW_MS = 10 * 60_000, MAX_HITS = 5;
+function rateOk(ip: string): boolean {
+	const now = Date.now();
+	const arr = (hits.get(ip) ?? []).filter(t => now - t < WINDOW_MS);
+	if (arr.length >= MAX_HITS) { hits.set(ip, arr); return false; }
+	arr.push(now); hits.set(ip, arr);
+	if (hits.size > 5000) for (const [k, v] of hits) if (!v.length || now - v[v.length - 1] > WINDOW_MS) hits.delete(k);
+	return true;
+}
+
+app.use((req: any, res: any, next: () => void) => {
 	res.setHeader('Access-Control-Allow-Origin', '*');
 	res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
 	res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
@@ -62,34 +80,73 @@ app.use((req, res, next) => {
 });
 
 // JSON สำหรับเอาไปใช้ต่อ: /api/status?range=24h|7d|30d|all
-app.get('/api/status', (req, res) => {
+const wrap = (fn: (req: any, res: any) => Promise<void>) =>
+	(req: any, res: any) => { fn(req, res).catch((e: unknown) => { console.error(e); if (!res.headersSent) res.status(500).send('Internal error'); }); };
+
+app.get('/api/status', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const limits = getRateLimits();
-	res.json(allS.map(s => {
-		const r = getReport(s.name, range);
-		return { ...s, rateLimitedUntil: limits[s.name] ?? null, brief: getBrief(s), range, stat: r.stat, incidents: r.incidents };
+	const out = await Promise.all(allS.map(async s => {
+		const [r, b] = await Promise.all([getReport(s.name, range), getBrief(s)]);
+		return { ...s, rateLimitedUntil: limits[s.name] ?? null, brief: b, range, stat: r.stat, incidents: r.incidents };
 	}));
-});
+	res.json(out);
+}));
 
-app.get('/', (req, res) => {
+app.get('/', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
-	res.send(renderIndex(allS.map(s => ({ s, r: getReport(s.name, range), b: getBrief(s) })), getRateLimits(), range));
+	const items = await Promise.all(allS.map(async s => ({ s, r: await getReport(s.name, range), b: await getBrief(s) })));
+	res.send(renderIndex(items, getRateLimits(), range));
+}));
+
+app.get('/subscribe', (req: any, res: any) => {
+	res.send(renderSubscribePage());
 });
 
-app.get(`/:name`, (req, res) => {
+app.post('/api/subscribe', wrap(async (req, res) => {
+	const ip = String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown').split(',')[0].trim();
+	if (!rateOk(ip)) { res.status(429).json({ ok: false, error: 'ขอบ่อยเกินไป กรุณารอ 10 นาทีแล้วลองใหม่' }); return; }
+	const email = normalizeEmail(req.body?.email);
+	const r = await requestSubscribe(email);
+	if (r === 'invalid') { res.status(400).json({ ok: false, error: 'รูปแบบอีเมลไม่ถูกต้อง' }); return; }
+	// 'sent' และ 'already' ตอบเหมือนกัน เพื่อไม่ให้รู้ว่าอีเมลนี้มีในระบบหรือไม่
+	res.json({ ok: true });
+}));
+
+app.get('/subscribe/confirm', wrap(async (req, res) => {
+	const r = await confirmSubscribe(req.query.token);
+	res.send(renderConfirmResult(r));
+}));
+
+app.all('/subscribe/unsubscribe', wrap(async (req, res) => {
+	const t = (req.method === 'POST' ? req.body?.token ?? req.query.token : req.query.token);
+	const ok = await unsubscribe(t);
+	res.send(renderUnsubResult(ok));
+}));
+
+app.get(`/:name`, wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const status = allS.find(s => s.name === req.params.name);
 	if (!status) { res.status(404).send(renderNotFound(req.params.name)); return; }
-	res.status(status.status === 1 ? 200 : 503).send(
-		renderDetail(status, getReport(status.name, range), getBrief(status), getRateLimits()[status.name] ?? 0, range)
-	);
-});
+	const [r, b] = await Promise.all([getReport(status.name, range), getBrief(status)]);
+	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range));
+}));
 
-try {
-	app.listen(port);
-	console.log(`Status server running on PORT: ${port}`);
-} catch (err) {
-	console.log(err);
-}
+// เริ่มเฝ้าดูหลังเชื่อมต่อ DB สำเร็จ เพื่อไม่ให้บันทึกประวัติหาย
+initHistory()
+	.then(() => initSubscribers())
+	.then(() => {
+		try {
+			app.listen(port);
+			console.log(`Status server running on PORT: ${port}`);
+		} catch (err) {
+			console.log(err);
+		}
+		startWatcher();
+	})
+	.catch((e: any) => {
+		console.error('เชื่อมต่อฐานข้อมูลไม่สำเร็จ:', e);
+		process.exit(1);
+	});
 
 cron.schedule('0 12 * * *', () => send());

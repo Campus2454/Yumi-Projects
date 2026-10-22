@@ -194,14 +194,44 @@ function getTransporter() {
 	}));
 }
 
+/** ส่งอีเมลดิบ 1 ฉบับ (ใช้ได้ทั้งยืนยันการสมัครและแจ้งเตือนทั่วไป) */
+export async function sendRaw(to: string, subject: string, html: string, text: string, headers: Record<string, string> = {}) {
+	const t = getTransporter();
+	if (!t) return;
+	await t.sendMail({
+		from: process.env.MAIL_FROM || `Yumi Status <${process.env.SMTP_USER}>`,
+		to, subject, html, text, headers,
+	});
+}
+
+/** ส่งรายงาน/แจ้งเตือนหาทุกคนที่ยืนยันแล้ว (ถ้ายังไม่มีผู้สมัครเลย จะส่งไปหา MAIL_TO แทน) */
 export async function sendStatusMail(items: MailItem[], mode: MailMode) {
 	if (!items.length) return;
 	const t = getTransporter();
 	if (!t) return;
 	const { subject, html, text } = buildMail(items, mode);
-	await t.sendMail({
-		from: process.env.MAIL_FROM || `Yumi Status <${process.env.SMTP_USER}>`,
-		to: process.env.MAIL_TO || 'thirphathrphlphun@gmail.com',
-		subject, html, text,
-	});
+
+	const { activeRecipients } = await import('./subscribers.js');
+	const subs = await activeRecipients();
+	const recipients = subs.length
+		? subs
+		: [{ email: process.env.MAIL_TO || 'thirphathrphlphun@gmail.com', unsubUrl: '' }];
+
+	const from = process.env.MAIL_FROM || `Yumi Status <${process.env.SMTP_USER}>`;
+	// ส่งทีละคนเพื่อให้ลิงก์ยกเลิกเป็นของแต่ละคน และไม่เห็นอีเมลของคนอื่น
+	for (const r of recipients) {
+		const headers: Record<string, string> = r.unsubUrl
+			? { 'List-Unsubscribe': `<${r.unsubUrl}>`, 'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click' }
+			: {};
+		const footer = r.unsubUrl
+			? `<p style="text-align:center;font-family:'Kanit',Tahoma,Arial,sans-serif;font-size:12px;color:#6f5856;margin:14px 0 0;">คุณได้รับอีเมลนี้เพราะสมัครรับการแจ้งเตือนสถานะ Yumi · <a href="${r.unsubUrl}" style="color:#b99a97;">ยกเลิกการรับ</a></p>`
+			: '';
+		const htmlFor = html.replace('</body>', `${footer}</body>`);
+		const textFor = r.unsubUrl ? `${text}\n\nยกเลิกการรับ: ${r.unsubUrl}` : text;
+		try {
+			await t.sendMail({ from, to: r.email, subject, html: htmlFor, text: textFor, headers });
+		} catch (e) {
+			console.error(`ส่งอีเมลถึง ${r.email} ไม่สำเร็จ:`, e);
+		}
+	}
 }

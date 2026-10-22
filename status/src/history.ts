@@ -1,12 +1,12 @@
-import Database from 'better-sqlite3';
-import fs from 'node:fs';
-import path from 'node:path';
+import pg from 'pg';
 import type { StatusData } from 'global/types';
 
 /**
- * ฐานข้อมูล timeline แบบ local (SQLite) ใช้เฉพาะระบบ status นี้เท่านั้น
- * - segments: ช่วงเวลาที่ service อยู่ในสถานะหนึ่ง ๆ (1 = running, 0 = down, -1 = loading) เก็บถาวร
+ * ประวัติสถานะเก็บใน PostgreSQL (DATABASE_URL)
+ * - segments: ช่วงเวลาที่ service อยู่ในสถานะหนึ่ง (1 = running, 0 = down, -1 = loading) เก็บถาวร
  * - pings:    ตัวอย่าง ping ทุก 60 วินาที (เก็บ 90 วัน)
+ *
+ * ต้องเรียก `await initHistory()` ก่อนเริ่มรับ request หรือเช็คสถานะ
  */
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -22,84 +22,109 @@ export const parseRange = (v: unknown): Range => (RANGE_LIST as string[]).includ
 const RANGE_MS = { '24h': DAY, '7d': 7 * DAY, '30d': 30 * DAY };
 const BUCKETS: Record<Range, number> = { '24h': 24, '7d': 28, '30d': 30, all: 30 };
 
-const DB_PATH = process.env.STATUS_DB_PATH || path.join(process.cwd(), 'data', 'status-history.db');
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const pool = new pg.Pool({
+	connectionString: process.env.DATABASE_URL,
+	max: 5,
+	idleTimeoutMillis: 30_000,
+	connectionTimeoutMillis: 5_000,
+});
+pool.on('error', e => console.error('PostgreSQL pool error:', e));
 
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('synchronous = NORMAL');
-db.exec(`
-CREATE TABLE IF NOT EXISTS segments(
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	service TEXT NOT NULL,
-	status INTEGER NOT NULL,
-	started_at INTEGER NOT NULL,
-	ended_at INTEGER,
-	last_seen INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_seg_service_start ON segments(service, started_at);
-CREATE TABLE IF NOT EXISTS pings(
-	service TEXT NOT NULL,
-	ts INTEGER NOT NULL,
-	ping INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_pings_service_ts ON pings(service, ts);
-`);
+type SegRow = { status: number; started_at: string; ended_at: string | null; last_seen: string };
+// pg คืนค่า bigint เป็น string จึงแปลงเป็น number ทุกครั้ง
+type Seg = { status: number; start: number; end: number | null; lastSeen: number };
+const toSeg = (r: SegRow): Seg => ({
+	status: r.status,
+	start: Number(r.started_at),
+	end: r.ended_at === null ? null : Number(r.ended_at),
+	lastSeen: Number(r.last_seen),
+});
 
-// ถ้าโปรแกรมเคยดับกลางทาง ปิด segment ที่ค้างไว้ ณ เวลาที่เห็นล่าสุด
-// (ช่วงที่ตัวเฝ้าดูดับไปจะเป็น "ไม่มีข้อมูล" ไม่ถูกนับเป็น downtime)
-db.prepare(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`).run();
+let ready: Promise<void> | null = null;
 
-type SegRow = { status: number; started_at: number; ended_at: number | null; last_seen: number };
-const q = {
-	insertSeg: db.prepare(`INSERT INTO segments(service, status, started_at, last_seen) VALUES (?, ?, ?, ?)`),
-	closeSeg: db.prepare(`UPDATE segments SET ended_at = ?, last_seen = ? WHERE id = ?`),
-	touchSeg: db.prepare(`UPDATE segments SET last_seen = ? WHERE id = ?`),
-	insertPing: db.prepare(`INSERT INTO pings(service, ts, ping) VALUES (?, ?, ?)`),
-	firstSeen: db.prepare(`SELECT MIN(started_at) AS t FROM segments WHERE service = ?`),
-	segsFrom: db.prepare(`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = ? AND (ended_at IS NULL OR ended_at > ?) ORDER BY started_at`),
-	latest: db.prepare(`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = ? ORDER BY started_at DESC LIMIT 1`),
-	lastOf: db.prepare(`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = ? AND status = ? ORDER BY started_at DESC LIMIT 1`),
-	pingAgg: db.prepare(`SELECT CAST((ts - ?) * 1.0 / ? AS INTEGER) AS k, AVG(ping) AS p FROM pings WHERE service = ? AND ts >= ? GROUP BY k ORDER BY k`),
-	pingStat: db.prepare(`SELECT MIN(ping) AS mn, MAX(ping) AS mx, AVG(ping) AS av, COUNT(*) AS n FROM pings WHERE service = ? AND ts >= ?`),
-	pruneSeg: db.prepare(`DELETE FROM segments WHERE ended_at IS NOT NULL AND ended_at < ?`),
-	prunePing: db.prepare(`DELETE FROM pings WHERE ts < ?`),
-};
+/** สร้างตารางและปิด segment ที่ค้างจากการดับครั้งก่อน (เรียกครั้งเดียวตอนเริ่มระบบ) */
+export function initHistory(): Promise<void> {
+	if (!ready) {
+		ready = (async () => {
+			if (!process.env.DATABASE_URL) throw new Error('ยังไม่ได้ตั้งค่า DATABASE_URL');
+			await pool.query(`
+				CREATE TABLE IF NOT EXISTS segments(
+					id BIGSERIAL PRIMARY KEY,
+					service TEXT NOT NULL,
+					status SMALLINT NOT NULL,
+					started_at BIGINT NOT NULL,
+					ended_at BIGINT,
+					last_seen BIGINT NOT NULL
+				);
+				CREATE INDEX IF NOT EXISTS idx_seg_service_start ON segments(service, started_at);
+				CREATE INDEX IF NOT EXISTS idx_seg_open ON segments(service) WHERE ended_at IS NULL;
+				CREATE TABLE IF NOT EXISTS pings(
+					service TEXT NOT NULL,
+					ts BIGINT NOT NULL,
+					ping INTEGER NOT NULL
+				);
+				CREATE INDEX IF NOT EXISTS idx_pings_service_ts ON pings(service, ts);
+			`);
+			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ ให้ปิดที่เวลาที่เห็นล่าสุด (ไม่นับเป็น downtime)
+			await pool.query(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`);
+		})();
+		ready.catch(() => { ready = null; }); // ลองใหม่ได้ถ้าเชื่อมต่อไม่สำเร็จ
+	}
+	return ready;
+}
 
-const open = new Map<string, { id: number; status: number; touched: number }>();
+/* ---------- การเขียน (cache สถานะที่เปิดอยู่ในหน่วยความจำ ลดการ query) ---------- */
+const open = new Map<string, { id: string; status: number; touched: number }>();
 const lastPing = new Map<string, number>();
 let lastPrune = 0;
+let writing: Promise<void> = Promise.resolve();
 
-/** เรียกทุกครั้งที่เช็คสถานะเสร็จ */
-export function recordStatus(list: StatusData[], now = Date.now()) {
-	db.transaction(() => {
+/** เรียกทุกครั้งที่เช็คสถานะเสร็จ (คิวการเขียนตามลำดับ ไม่ทำให้การเฝ้าดูค้าง) */
+export function recordStatus(list: StatusData[], now = Date.now()): void {
+	writing = writing.then(() => write(list, now)).catch(e => console.error('บันทึกประวัติสถานะไม่สำเร็จ:', e));
+}
+
+async function write(list: StatusData[], now: number) {
+	await initHistory();
+	const client = await pool.connect();
+	try {
+		await client.query('BEGIN');
 		for (const s of list) {
 			const cur = open.get(s.name);
 			if (!cur || cur.status !== s.status) {
-				if (cur) q.closeSeg.run(now, now, cur.id);
-				const r = q.insertSeg.run(s.name, s.status, now, now);
-				open.set(s.name, { id: Number(r.lastInsertRowid), status: s.status, touched: now });
+				if (cur) await client.query(`UPDATE segments SET ended_at = $1, last_seen = $1 WHERE id = $2`, [now, cur.id]);
+				const r = await client.query<{ id: string }>(
+					`INSERT INTO segments(service, status, started_at, last_seen) VALUES ($1, $2, $3, $3) RETURNING id`,
+					[s.name, s.status, now],
+				);
+				open.set(s.name, { id: r.rows[0].id, status: s.status, touched: now });
 			} else if (now - cur.touched >= TOUCH_MS) {
-				q.touchSeg.run(now, cur.id);
+				await client.query(`UPDATE segments SET last_seen = $1 WHERE id = $2`, [now, cur.id]);
 				cur.touched = now;
 			}
 			if (s.status === 1 && typeof s.ping === 'number' && now - (lastPing.get(s.name) ?? 0) >= PING_EVERY_MS) {
-				q.insertPing.run(s.name, now, Math.round(s.ping));
+				await client.query(`INSERT INTO pings(service, ts, ping) VALUES ($1, $2, $3)`, [s.name, now, Math.round(s.ping)]);
 				lastPing.set(s.name, now);
 			}
 		}
-		if (now - lastPrune > PRUNE_EVERY_MS) {
-			q.pruneSeg.run(now - SEG_KEEP_MS);
-			q.prunePing.run(now - PING_KEEP_MS);
-			lastPrune = now;
-		}
-	})();
+		await client.query('COMMIT');
+	} catch (e) {
+		await client.query('ROLLBACK').catch(() => {});
+		open.clear(); // ให้โหลดสถานะใหม่จาก DB ในรอบถัดไป
+		throw e;
+	} finally {
+		client.release();
+	}
+
+	if (now - lastPrune > PRUNE_EVERY_MS) {
+		lastPrune = now;
+		await pool.query(`DELETE FROM segments WHERE ended_at IS NOT NULL AND ended_at < $1`, [now - SEG_KEEP_MS]);
+		await pool.query(`DELETE FROM pings WHERE ts < $1`, [now - PING_KEEP_MS]);
+	}
 }
 
 /* ------------------------------------------------------------------ */
 /*  Brief: สรุปสถานะปัจจุบัน + ครั้งล่าสุดของสถานะตรงข้าม               */
-/*  up   -> uptime ปัจจุบัน + downtime ล่าสุด                           */
-/*  down -> downtime ปัจจุบัน + uptime ล่าสุด                           */
 /* ------------------------------------------------------------------ */
 export interface Brief {
 	state: 'up' | 'down' | 'loading';
@@ -108,21 +133,31 @@ export interface Brief {
 	last: { kind: 'down' | 'up'; start: number; end: number; duration: number } | null;
 }
 
-export function getBrief(s: StatusData, now = Date.now()): Brief {
+/** หมายเหตุ: อ่านจาก DB แบบ async จึงเรียกผ่าน `await getBrief(...)` */
+export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> {
+	await initHistory();
 	const state = s.status === 1 ? 'up' : s.status === 0 ? 'down' : 'loading';
-	const cur = q.latest.get(s.name) as SegRow | undefined;
-	const isOpen = cur && cur.ended_at === null ? cur : null;
+
+	const cur = (await pool.query<SegRow>(
+		`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = $1 ORDER BY started_at DESC LIMIT 1`,
+		[s.name],
+	)).rows[0];
+	const isOpen = cur && cur.ended_at === null ? toSeg(cur) : null;
 
 	let since: number | null = null;
-	if (state === 'up') since = s.uptime ? now - s.uptime * 1000 : isOpen && isOpen.status === 1 ? isOpen.started_at : null;
-	else if (state === 'down') since = isOpen && isOpen.status === 0 ? isOpen.started_at : null;
+	if (state === 'up') since = s.uptime ? now - s.uptime * 1000 : isOpen && isOpen.status === 1 ? isOpen.start : null;
+	else if (state === 'down') since = isOpen && isOpen.status === 0 ? isOpen.start : null;
 
 	let last: Brief['last'] = null;
 	if (state !== 'loading') {
-		const r = q.lastOf.get(s.name, state === 'up' ? 0 : 1) as SegRow | undefined;
+		const r = (await pool.query<SegRow>(
+			`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = $1 AND status = $2 ORDER BY started_at DESC LIMIT 1`,
+			[s.name, state === 'up' ? 0 : 1],
+		)).rows[0];
 		if (r) {
-			const end = r.ended_at ?? r.last_seen;
-			last = { kind: state === 'up' ? 'down' : 'up', start: r.started_at, end, duration: Math.max(0, end - r.started_at) };
+			const g = toSeg(r);
+			const end = g.end ?? g.lastSeen;
+			last = { kind: state === 'up' ? 'down' : 'up', start: g.start, end, duration: Math.max(0, end - g.start) };
 		}
 	}
 	return { state, since, ms: since !== null ? Math.max(0, now - since) : null, last };
@@ -148,17 +183,22 @@ export interface Report {
 const overlap = (a0: number, a1: number, b0: number, b1: number) => Math.max(0, Math.min(a1, b1) - Math.max(a0, b0));
 const cache = new Map<string, { at: number; rep: Report }>();
 
-export function getReport(service: string, range: Range = '30d', now = Date.now()): Report {
+/** หมายเหตุ: อ่านจาก DB แบบ async จึงเรียกผ่าน `await getReport(...)` */
+export async function getReport(service: string, range: Range = '30d', now = Date.now()): Promise<Report> {
 	const key = `${service}|${range}`;
 	const hit = cache.get(key);
 	if (hit && now - hit.at < 1500) return hit.rep;
+	await initHistory();
 
-	const first = (q.firstSeen.get(service) as { t: number | null }).t;
-	const span = range === 'all' ? Math.max(now - (first ?? now), HOUR) : RANGE_MS[range];
+	const first = (await pool.query<{ t: string | null }>(`SELECT MIN(started_at) AS t FROM segments WHERE service = $1`, [service])).rows[0]?.t;
+	const firstT = first === null || first === undefined ? null : Number(first);
+	const span = range === 'all' ? Math.max(now - (firstT ?? now), HOUR) : RANGE_MS[range];
 	const from = now - span;
 
-	const rows = q.segsFrom.all(service, from) as SegRow[];
-	const segs = rows.map(r => ({ status: r.status, start: r.started_at, end: r.ended_at ?? now, open: r.ended_at === null }));
+	const segs = (await pool.query<SegRow>(
+		`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = $1 AND (ended_at IS NULL OR ended_at > $2) ORDER BY started_at`,
+		[service, from],
+	)).rows.map(toSeg).map(g => ({ status: g.status, start: g.start, end: g.end ?? now, open: g.end === null }));
 
 	let observed = 0, down = 0, incidents = 0, longest = 0;
 	for (const g of segs) {
@@ -186,24 +226,32 @@ export function getReport(service: string, range: Range = '30d', now = Date.now(
 		.slice(-500)
 		.map(g => {
 			const s = Math.max(g.start, from), e = Math.min(g.end, now);
-			const width = Math.max(((e - s) / span) * 100, g.status === 0 ? 0.6 : 0.3); // ช่วงที่ล่มต้องมองเห็นได้เสมอ
+			const width = Math.max(((e - s) / span) * 100, g.status === 0 ? 0.6 : 0.3);
 			return { left: Math.min(((s - from) / span) * 100, 100 - width), width, status: g.status, start: s, end: e };
 		});
 
-	const inc = segs
+	const incs = segs
 		.filter(g => g.status === 0)
 		.reverse()
 		.slice(0, 10)
 		.map(g => ({ start: g.start, end: g.open ? null : g.end, duration: g.end - g.start }));
 
+	// ping: รวมเป็น 120 จุดในช่วง (AVG ใน SQL)
 	const pingFrom = Math.max(from, now - PING_KEEP_MS);
 	const N = 120, psize = Math.max((now - pingFrom) / N, 1);
-	const pings = (q.pingAgg.all(pingFrom, psize, service, pingFrom) as { k: number; p: number }[])
-		.map(r => ({ ts: pingFrom + Math.min(r.k, N - 1) * psize + psize / 2, ping: Math.round(r.p) }));
-	const ps = q.pingStat.get(service, pingFrom) as { mn: number | null; mx: number | null; av: number | null; n: number };
-	const pingStats = ps.n > 0 ? { min: ps.mn!, avg: Math.round(ps.av!), max: ps.mx! } : null;
+	const pings = (await pool.query<{ k: number; p: number }>(
+		`SELECT CAST(FLOOR((ts - $2) / $3) AS INTEGER) AS k, AVG(ping)::float AS p
+		 FROM pings WHERE service = $1 AND ts >= $2 GROUP BY k ORDER BY k`,
+		[service, pingFrom, psize],
+	)).rows.map((r: { k: number; p: number }) => ({ ts: pingFrom + Math.min(r.k, N - 1) * psize + psize / 2, ping: Math.round(r.p) }));
 
-	const rep: Report = { now, range, from, stat, buckets, strip, incidents: inc, pingFrom, pings, pingStats };
+	const ps = (await pool.query<{ mn: number | null; mx: number | null; av: number | null; n: string }>(
+		`SELECT MIN(ping) AS mn, MAX(ping) AS mx, AVG(ping)::float AS av, COUNT(*) AS n FROM pings WHERE service = $1 AND ts >= $2`,
+		[service, pingFrom],
+	)).rows[0];
+	const pingStats = Number(ps.n) > 0 ? { min: ps.mn!, avg: Math.round(ps.av!), max: ps.mx! } : null;
+
+	const rep: Report = { now, range, from, stat, buckets, strip, incidents: incs, pingFrom, pings, pingStats };
 	cache.set(key, { at: now, rep });
 	return rep;
 }
