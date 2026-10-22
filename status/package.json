@@ -23,7 +23,8 @@
     "build": "tsc",
     "_auto": "ts-node ./src/automatic.ts",
     "auto:start": "cross-env IS_DEV=false node ./build/automatic.js",
-    "auto:dev": "cross-env IS_DEV=true tsx ./src/automatic.ts"
+    "auto:dev": "cross-env IS_DEV=true tsx ./src/automatic.ts",
+    "deploy": "dotenv -e .env -- bash -c 'curl -X GET \"$COOLIFY_DOMAIN/api/v1/deploy?uuid=$COOLIFY_DEPLOY_UUID\" -H \"Authorization: Bearer $COOLIFY_TOKEN\"'"
   },
   "devDependencies": {
     "@types/express": "^5",
