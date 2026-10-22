@@ -19,7 +19,7 @@ export default function UserLogoutPage() {
                 await postAuthLogoutLocalhost();
             }
 
-            window.location.pathname = '/dashboard';
+            window.location.pathname = '/';
             setLogging_out(false);
         } catch (error) {
             console.error(error);
