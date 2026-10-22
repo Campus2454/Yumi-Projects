@@ -12,6 +12,7 @@ import { useHideLoading } from '../utils/hooks/useHideLoading';
 import { OfflineAlert } from './OfflineAlert';
 
 export function Providers({ children }: { children: React.ReactNode }) {
+
   const [guild, setGuild] = useState<GuildInfo>();
   const updateGuild = (guild: GuildInfo) => setGuild(guild);
 
@@ -32,7 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     useHideLoading();
   }, [pathname]);
 
-  return (
+  return (<div>
     <ErrorPopupContext.Provider value={{ errorPopup, updateErrorPopup }}>
     <UserContext.Provider value={{ user, loadingUser, userError, updateUser, updateLoadingUser, updateUserError }}>
     <GuildContext.Provider value={{ guild, updateGuild }}>
@@ -56,5 +57,5 @@ export function Providers({ children }: { children: React.ReactNode }) {
     </GuildContext.Provider>
     </UserContext.Provider>
     </ErrorPopupContext.Provider>
-  );
+  </div>);
 }
