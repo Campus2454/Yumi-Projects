@@ -30,8 +30,12 @@ WORKDIR /app
 RUN apk add --no-cache libc6-compat wget
 RUN corepack enable && corepack prepare yarn@4.11.0 --activate
 
+COPY package.json yarn.lock* .yarnrc.yml ./
 COPY global ./global
 COPY status ./status
+
+COPY --from=builder /app/global/build /app/global/build
+COPY --from=builder /app/status/build /app/status/build
 
 WORKDIR /app/status
 
@@ -42,9 +46,6 @@ ENV PORT=3006
 ENV HOST=0.0.0.0
 
 RUN yarn install
-
-COPY --from=builder /app/global/build ./global/build
-COPY --from=builder /app/status/build ./status/build
 
 EXPOSE 3006
 
