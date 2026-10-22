@@ -14,6 +14,199 @@ const isDev = process.env.IS_DEV === 'true';
 const port = isDev ? 30006 : 3006;
 const app = express();
 
+const esc = (s: string) =>
+	s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+const pretty = (name: string) => esc(capitalize(name.split('_').join(' ')));
+const stateOf = (s: number) =>
+	s === 1 ? { key: 'ok', label: 'Running' } : s === -1 ? { key: 'load', label: 'Loading' } : { key: 'down', label: 'Stopped' };
+
+const CSS = `
+:root{
+	--bg:#0c0506; --surface:rgba(255,255,255,.045); --line:rgba(255,255,255,.1);
+	--text:#fff4f2; --muted:#c9a5a1; --brand:#f13b3b;
+	--ok:#3ddc97; --load:#4cc9f0; --down:#ff5a5f; --c:var(--brand);
+	color-scheme:dark; box-sizing:border-box;
+}
+*,*::before,*::after{box-sizing:inherit}
+[data-state=ok]{--c:var(--ok)} [data-state=load]{--c:var(--load)} [data-state=down]{--c:var(--down)}
+html{min-height:100%;background:var(--bg)}
+body{
+	margin:0;min-height:100vh;color:var(--text);font-family:'Kanit',system-ui,sans-serif;
+	background:
+		radial-gradient(900px 500px at 15% -10%, rgba(241,59,59,.38), transparent 60%),
+		radial-gradient(700px 500px at 100% 110%, rgba(158,0,0,.35), transparent 60%),
+		var(--bg);
+	background-attachment:fixed;
+	padding:max(24px,env(safe-area-inset-top)) 20px max(24px,env(safe-area-inset-bottom));
+}
+a{color:inherit;text-decoration:none}
+:focus-visible{outline:2px solid #fff;outline-offset:3px;border-radius:12px}
+.wrap{max-width:900px;margin:0 auto}
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:40px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:600;font-size:1.05rem}
+.brand img{width:36px;height:36px;border-radius:10px}
+.btns{display:flex;gap:10px}
+.btn{
+	width:42px;height:42px;display:grid;place-items:center;border-radius:12px;cursor:pointer;
+	background:var(--surface);border:1px solid var(--line);color:var(--text);transition:background .2s,border-color .2s;
+}
+.btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.28)}
+.btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ---------- index ---------- */
+.banner{
+	display:flex;align-items:center;gap:18px;padding:26px 28px;border-radius:22px;margin-bottom:28px;
+	background:linear-gradient(120deg, color-mix(in srgb,var(--c) 22%,transparent), var(--surface) 70%);
+	border:1px solid color-mix(in srgb,var(--c) 45%,transparent);
+}
+.banner h1{margin:0;font-size:clamp(1.4rem,4.5vw,2.1rem);font-weight:700;line-height:1.2}
+.banner p{margin:4px 0 0;color:var(--muted);font-weight:300}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.card{
+	display:flex;flex-direction:column;gap:18px;padding:20px 22px;border-radius:18px;
+	background:var(--surface);border:1px solid var(--line);transition:border-color .2s,background .2s;
+}
+.card:hover{border-color:color-mix(in srgb,var(--c) 70%,transparent);background:rgba(255,255,255,.07)}
+.card .name{font-weight:600;font-size:1.15rem}
+.card .row{display:flex;align-items:center;justify-content:space-between;color:var(--muted);font-size:.92rem;font-weight:300}
+.card .state{display:flex;align-items:center;gap:8px;color:var(--c);font-weight:400}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--c);box-shadow:0 0 12px var(--c);flex:none}
+.empty{padding:40px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:18px}
+
+/* ---------- detail ---------- */
+.hero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:16px 0 40px}
+.beacon{position:relative;width:132px;height:132px;display:grid;place-items:center;margin-bottom:30px}
+.beacon::before,.beacon::after{
+	content:"";position:absolute;inset:0;border-radius:50%;border:2px solid var(--c);opacity:0;
+}
+[data-state=ok] .beacon::before,[data-state=load] .beacon::before{animation:ring 2.8s ease-out infinite}
+[data-state=ok] .beacon::after,[data-state=load] .beacon::after{animation:ring 2.8s ease-out 1.4s infinite}
+[data-state=down] .beacon::before{opacity:.5}
+.core{
+	width:84px;height:84px;border-radius:50%;display:grid;place-items:center;
+	background:radial-gradient(circle at 35% 30%, color-mix(in srgb,var(--c) 70%,#fff), var(--c));
+	box-shadow:0 0 60px color-mix(in srgb,var(--c) 60%,transparent);
+}
+.core svg{width:38px;height:38px;fill:none;stroke:#0c0506;stroke-width:3.2;stroke-linecap:round;stroke-linejoin:round}
+@keyframes ring{0%{transform:scale(.65);opacity:.9}100%{transform:scale(1.35);opacity:0}}
+.hero h1{margin:0;font-size:clamp(2.2rem,8vw,3.6rem);font-weight:700;line-height:1.1;color:#ffe3df}
+.pill{
+	margin-top:16px;padding:6px 18px;border-radius:999px;font-weight:400;color:var(--c);
+	background:color-mix(in srgb,var(--c) 14%,transparent);border:1px solid color-mix(in srgb,var(--c) 45%,transparent);
+}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
+.metric{padding:22px 24px;border-radius:18px;background:var(--surface);border:1px solid var(--line)}
+.metric .k{color:var(--muted);font-weight:300;font-size:.95rem}
+.metric .v{margin-top:6px;font-size:1.7rem;font-weight:600;word-break:break-word}
+.metric .v.na{color:rgba(255,255,255,.35)}
+.foot{margin-top:36px;text-align:center;color:var(--muted);font-size:.85rem;font-weight:300}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+`;
+
+const ICON = {
+	back: '<svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
+	refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg>',
+	ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+	load: '<svg viewBox="0 0 24 24"><path d="M12 6v6l4 2"/></svg>',
+	down: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+};
+
+const shell = (title: string, body: string, state = '') => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#0c0506" />
+<title>${title}</title>
+<link rel="icon" href="https://assets.camming.xyz/photos/logo/CammingLogo.webp" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet" />
+<style>${CSS}</style>
+</head>
+<body>
+<div class="wrap"${state ? ` data-state="${state}"` : ''}>
+${body}
+</div>
+<script>setTimeout(function(){location.reload()},10000)</script>
+</body>
+</html>`;
+
+/** หน้าแรก: รายการทุก service */
+export function renderIndex(list: StatusData[]): string {
+	const down = list.filter(s => s.status === 0).length;
+	const loading = list.filter(s => s.status === -1).length;
+
+	const overall = list.length === 0
+		? { key: 'load', title: 'Checking services…', sub: 'Results will appear in a moment.' }
+		: down > 0
+			? { key: 'down', title: down === list.length ? 'All services are down' : `${down} of ${list.length} services are down`, sub: 'We are aware and working on it.' }
+			: loading > 0
+				? { key: 'load', title: 'Some services are starting', sub: `${loading} of ${list.length} still loading.` }
+				: { key: 'ok', title: 'All services are running', sub: `${list.length} of ${list.length} responding normally.` };
+
+	const cards = list.map(s => {
+		const st = stateOf(s.status);
+		return `<a class="card" data-state="${st.key}" translate="no" href="/${encodeURIComponent(s.name)}">
+	<div class="name">${pretty(s.name)}</div>
+	<div class="row">
+		<span class="state"><span class="dot"></span>${st.label}</span>
+		<span>${s.ping ? `${s.ping} ms` : 'N/A'}</span>
+	</div>
+</a>`;
+	}).join('\n');
+
+	return shell('Camming - Status', `
+<header class="top">
+	<div class="brand"><img src="https://assets.camming.xyz/photos/logo/CammingLogo.webp" alt="" />Camming Status</div>
+</header>
+<section class="banner" data-state="${overall.key}">
+	<span class="dot" style="width:14px;height:14px"></span>
+	<div><h1>${overall.title}</h1><p>${overall.sub}</p></div>
+</section>
+${list.length ? `<section class="grid">${cards}</section>` : '<div class="empty">No services reported yet.</div>'}
+<p class="foot">Updates automatically every 10 seconds</p>`, overall.key);
+}
+
+/** หน้ารายละเอียดของแต่ละ service */
+export function renderDetail(s: StatusData): string {
+	const st = stateOf(s.status);
+	const na = (v: unknown, f: (x: any) => string) => (v ? `<div class="v">${esc(f(v))}</div>` : '<div class="v na">N/A</div>');
+
+	return shell(`Camming - Status (${esc(s.name)})`, `
+<header class="top">
+	<div class="btns">
+		<a class="btn" href="/" target="_top" aria-label="Back to all services">${ICON.back}</a>
+		<button class="btn" onclick="location.reload()" aria-label="Refresh">${ICON.refresh}</button>
+	</div>
+	<div class="brand"><img src="https://assets.camming.xyz/photos/logo/CammingLogo.webp" alt="" />Camming</div>
+</header>
+<section class="hero">
+	<div class="beacon"><div class="core">${ICON[st.key as 'ok' | 'load' | 'down']}</div></div>
+	<h1 translate="no">${pretty(s.name)}</h1>
+	<div class="pill">${st.label}</div>
+</section>
+<section class="metrics">
+	<div class="metric"><div class="k">Ping</div>${na(s.ping, v => `${v} ms`)}</div>
+	<div class="metric"><div class="k">Uptime</div>${na(s.uptime, v => formatDuration(v * 1000, 'en-US', 'short'))}</div>
+	<div class="metric"><div class="k">Version</div>${na(s.version, v => `v${v}`)}</div>
+</section>
+<p class="foot">Updates automatically every 10 seconds</p>`, st.key);
+}
+
+/** 404 */
+export function renderNotFound(name: string): string {
+	return shell('Camming - Status', `
+<header class="top">
+	<div class="btns"><a class="btn" href="/" target="_top" aria-label="Back to all services">${ICON.back}</a></div>
+</header>
+<section class="hero" data-state="down">
+	<div class="beacon"><div class="core">${ICON.down}</div></div>
+	<h1>Not found</h1>
+	<div class="pill">No service named “${esc(name)}”</div>
+</section>`, 'down');
+}
+
 async function checkAll() {
 	console.log(`${chalk.gray(`[${(new Date()).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', })}]`)} Checking status...`);
 	try{
@@ -74,48 +267,13 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => {
-	res.send(`<html>
-<head>
-	<meta charset="utf-8" />
-		<link rel="icon" href="https://assets.camming.xyz/photos/logo/CammingLogo.webp" />
-		<link href='https://fonts.googleapis.com/css?family=Kanit' rel='stylesheet'>
-	<meta name="theme-color" content="#f13b3b" />
-<title>Camming - Status</title>
-</head>
-<body style="position: fixed; top: 0; left: 0; z-index: -100; background: linear-gradient(160deg, rgb(158, 0, 0) 0%, rgb(61, 0, 0) 40%, rgb(0, 0, 0) 100%); height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ffff; font-family: Kanit; ">
-	<h1>Welcome To Status Page</h1>
-	<div>
-		${allS.map((status) => {
-			return(`<a translate="no" href="/${status.name}" target="_top" style="padding: 10px; margin: 10px; border-radius: 10px; background-color: #ce2d2d; box-shadow: 3px 3px 5px 0px black; border: none; color: #fff; font-weight: bold; cursor: pointer; text-decoration: none;">${capitalize((status.name.split('_')).join(' '))}</a>`);
-		}).join('')}
-	</div>
-</body>
-</html>`);
+	res.send(renderIndex(allS));
 });
-app.get(`/:name`, (req, res) => {
-	const name = req.params.name;
-	const status = allS.find(s => s.name === name);
-	if(status){res.status(status.status == 1 ? 200 : 503).send(`<html>
-<head>
-	<meta charset="utf-8" />
-	<link rel="icon" href="https://assets.camming.xyz/photos/logo/CammingLogo.webp" />
-	<link href='https://fonts.googleapis.com/css?family=Kanit' rel='stylesheet'>
-	<meta name="theme-color" content="#f13b3b" />
-	<title>Camming - Status (${status.name})</title>
-</head>
-<body style=" position: fixed; top: 0; left: 0; z-index: -100; background: linear-gradient(160deg, rgb(158, 0, 0) 0%, rgb(61, 0, 0) 40%, rgb(0, 0, 0) 100%); height: 100%; width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #ffff; font-family: Kanit; ">
-	<div style="display: flex; flex-direction: row; position: fixed; top: 10px; left: 10px;">
-		<a href="/" target="_top" style="height: 30px; width: 30px; padding: 5px; margin: 5px; border: solid 3px #ffc3c3; border-radius: 15px; cursor: pointer;"><svg viewBox="0 0 1024.00 1024.00" class="icon" xmlns="http://www.w3.org/2000/svg" fill="#ffffff" stroke="#ffffff" stroke-width="76.8"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path fill="#ffffff" d="M224 480h640a32 32 0 110 64H224a32 32 0 010-64z"></path><path fill="#ffffff" d="M237.248 512l265.408 265.344a32 32 0 01-45.312 45.312l-288-288a32 32 0 010-45.312l288-288a32 32 0 1145.312 45.312L237.248 512z"></path></g></svg></a>
-		<div onclick="location.reload()" style="height: 30px; width: 30px; padding: 5px; margin: 5px; border: solid 3px #ffc3c3; border-radius: 15px; cursor: pointer;"><svg fill="#ffffff" viewBox="-2.4 -2.4 28.80 28.80" xmlns="http://www.w3.org/2000/svg" stroke="#ffffff" stroke-width="1.2"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"><path d="M1,12A11,11,0,0,1,17.882,2.7l1.411-1.41A1,1,0,0,1,21,2V6a1,1,0,0,1-1,1H16a1,1,0,0,1-.707-1.707l1.128-1.128A8.994,8.994,0,0,0,3,12a1,1,0,0,1-2,0Zm21-1a1,1,0,0,0-1,1,9.01,9.01,0,0,1-9,9,8.9,8.9,0,0,1-4.42-1.166l1.127-1.127A1,1,0,0,0,8,17H4a1,1,0,0,0-1,1v4a1,1,0,0,0,.617.924A.987.987,0,0,0,4,23a1,1,0,0,0,.707-.293L6.118,21.3A10.891,10.891,0,0,0,12,23,11.013,11.013,0,0,0,23,12,1,1,0,0,0,22,11Z"></path></g></svg></div>
-	</div>
 
-	<div style="margin: 0; padding-bottom: 10px; color: #ffd1d1; font-weight: 900; font-size: xxx-large;">${capitalize((status.name.split('_')).join(' '))}</div>
-	<div style="font-weight: bold; color: #fff; display: flex; flex-direction: row; font-size: medium;">Status: <div style="font-weight: normal; padding-left: 5px; color: ${status.status == 1 ? 'springgreen' : status.status == -1 ? 'deepskyblue' : 'lightcoral'};">${status.status == 1 ? 'Running' : status.status == -1 ? 'Loading' : 'Stopped'}</div></div>
-	<div style="font-weight: bold; color: #fff; display: flex; flex-direction: row; font-size: medium;">Ping: <div style="font-weight: normal; padding-left: 5px;">${status.ping ? `${status.ping} ms` : `N/A`}</div></div>
-	<div style="font-weight: bold; color: #fff; display: flex; flex-direction: row; font-size: medium;">Uptime: <div style="font-weight: normal; padding-left: 5px;">${status.uptime ? `${formatDuration((status.uptime * 1000), 'en-US', 'short')}` : `N/A`}</div></div>
-	<div style="font-weight: bold; color: lightgray; display: flex; flex-direction: row; font-size: smaller;">v. <div style="font-weight: normal; padding-left: 5px;">${status.version ? `${status.version}` : `N/A`}</div></div>
-</body>
-</html>`)}else{res.status(404).send('Status Not Found')};
+app.get(`/:name`, (req, res) => {
+	const status = allS.find(s => s.name === req.params.name);
+	if (!status) res.status(404).send(renderNotFound(req.params.name));
+	else res.status(status.status === 1 ? 200 : 503).send(renderDetail(status));
 });
 
 try {
