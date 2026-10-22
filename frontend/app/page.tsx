@@ -313,7 +313,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="fade-up" id="status" style={{ display: "flex", position: part2selected === 2 ? "static" : "fixed", flexDirection: "column", flexWrap: "wrap", justifyContent: "center", alignContent: "center", alignItems: "center", width: "100%", }}>
-                    <iframe src="https://status.yumistack.net/iframe?range=30d" style={{ width: "100%", height: "520px", border: 0, background: "transparent" }} title="Yumi Status" loading="lazy"/>
+                    <iframe src="https://status.yumistack.net/iframe?range=30d" style={{ width: "80%", height: "520px", border: "10px solid #0f0f0f", borderRadius: 20, boxShadow: '0 0 20px 2px #000', background: "transparent" }} title="Yumi Status" loading="lazy"/>
                 </div>
             </div>
         </div>
