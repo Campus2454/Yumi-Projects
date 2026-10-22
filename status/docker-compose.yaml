@@ -31,7 +31,6 @@ services:
       timeout: 5s
       retries: 10
     restart: always
-    # ไม่มี ports: เพื่อไม่ให้เปิด 5432 ออกอินเทอร์เน็ต
 
 volumes:
   status-pg:
