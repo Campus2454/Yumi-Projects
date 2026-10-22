@@ -93,6 +93,14 @@ app.get('/api/status', wrap(async (req, res) => {
 	res.json(out);
 }));
 
+// หน้าสำหรับฝังใน iframe: เหมือนหน้าแรกแต่ไม่มีพื้นหลัง และลิงก์รายละเอียดเปิดแท็บใหม่
+app.get('/iframe', wrap(async (req, res) => {
+	const range = parseRange(req.query.range);
+	const items = await Promise.all(allS.map(async s => ({ s, r: await getReport(s.name, range), b: await getBrief(s) })));
+	res.set('Content-Security-Policy', "frame-ancestors *");
+	res.send(renderIndex(items, getRateLimits(), range, true));
+}));
+
 app.get('/', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const items = await Promise.all(allS.map(async s => ({ s, r: await getReport(s.name, range), b: await getBrief(s) })));
@@ -144,7 +152,7 @@ initHistory()
 		}
 		startWatcher();
 	})
-	.catch((e: any) => {
+	.catch(e => {
 		console.error('เชื่อมต่อฐานข้อมูลไม่สำเร็จ:', e);
 		process.exit(1);
 	});

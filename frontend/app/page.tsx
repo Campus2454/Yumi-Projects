@@ -312,16 +312,8 @@ export default function HomePage() {
                     </div>
                 </div>
 
-                <div className="fade-up" id="status" style={{ display: "flex", position: part2selected === 2 ? "static" : "fixed", flexDirection: "column", flexWrap: "wrap", justifyContent: "flex-start", alignContent: "center", alignItems: "flex-start", width: "100%", }}>
-                    {/* <div style={{ width: "99vw", display: "flex", justifyContent: "center", }}>
-                        <div style={{ width: "90%", }}>
-                            <a href={`${process.env.NEXT_PUBLIC_STATUS_DOMAIN}/`} target="_blank" style={{ color: "#fff", textDecoration: 0, background: "rgba(199, 0, 0, 0.7)", borderRadius: "10px", padding: 10, cursor: "pointer", }}>open</a>
-                        </div>
-                    </div>
-                    <div style={{ width: "99vw", display: "flex", justifyContent: "center", }}>
-                        <iframe id="status_iframe" src={`${process.env.NEXT_PUBLIC_STATUS_DOMAIN}/`}  width="90%" height="500px" frameBorder="0" sandbox="allow-scripts" style={{ borderRadius: "10px", boxShadow: "black 4px 7px 20px 0px", }}></iframe>
-                    </div> */}
-                    <a href="https://stats.uptimerobot.com/mj7kJjCtUx" target="_blank" style={{ color: "#fff", textDecoration: 0, background: "rgba(199, 0, 0, 0.7)", borderRadius: "10px", padding: 10, cursor: "pointer", }}>go to status page</a>
+                <div className="fade-up" id="status" style={{ display: "flex", position: part2selected === 2 ? "static" : "fixed", flexDirection: "column", flexWrap: "wrap", justifyContent: "center", alignContent: "center", alignItems: "center", width: "100%", }}>
+                    <iframe src="https://status.yumistack.net/iframe?range=30d" style={{ width: "100%", height: "520px", border: 0, background: "transparent" }} title="Yumi Status" loading="lazy"/>
                 </div>
             </div>
         </div>

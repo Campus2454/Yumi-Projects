@@ -4,11 +4,12 @@ import { useEffect, useState } from "react";
 import { getStatus, apiStatusPaths, apiStatusPath } from "../utils/api";
 import styled from "styled-components";
 import { RiGlobalOffLine } from "react-icons/ri";
+import { useOnlineStatus } from "../utils/hooks/useOnlineStatus";
 
 export const OfflineAlert = () => {
-  // const isOnline = useOnlineStatus();
+  const isOnline = useOnlineStatus();
   const [_isOnline, setIsOnline] = useState(true);
-  const isOnline = false;
+  // const isOnline = false;
   const [statuses, setStatuses] = useState<Partial<Record<apiStatusPath, boolean>>>({});
   const [show, setShow] = useState(false);
 

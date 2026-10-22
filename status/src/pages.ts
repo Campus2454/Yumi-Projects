@@ -129,6 +129,12 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 	.avail{grid-template-columns:1fr 1fr}.avail>div,.avail>div:first-child{padding:0}.avail>div+div{border-left:0}
 	.seg a{padding:7px 12px}
 }
+html.embed,body.embed{background:transparent!important;background-image:none!important}
+body.embed::before{display:none}
+body.embed{padding:0;min-height:0}
+body.embed .wrap{max-width:none}
+body.embed .top{margin-bottom:16px}
+body.embed .foot{margin-top:16px}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 `;
 
@@ -147,8 +153,8 @@ document.addEventListener('visibilitychange',function(){if(!document.hidden)refr
 var b=document.getElementById('reload');if(b)b.addEventListener('click',refresh);
 })();`;
 
-const shell = (title: string, left: string, main: string, state: string) => `<!doctype html>
-<html lang="th">
+const shell = (title: string, left: string, main: string, state: string, embed = false) => `<!doctype html>
+<html lang="th"${embed ? ' class="embed"' : ''}>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -160,7 +166,7 @@ const shell = (title: string, left: string, main: string, state: string) => `<!d
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet" />
 <style>${CSS}</style>
 </head>
-<body>
+<body${embed ? ' class="embed"' : ''}>
 <div class="wrap">
 <header class="top">
 	<div class="l">${left}</div>
@@ -192,7 +198,9 @@ function lastLine(b: Brief): string {
 
 /* ------------------------------------------------------------------ */
 
-export function renderIndex(items: Item[], limits: Record<string, number>, range: Range): string {
+export function renderIndex(items: Item[], limits: Record<string, number>, range: Range, embed = false): string {
+	const base = embed ? '/iframe' : '/';
+	const linkTarget = embed ? ' target="_blank" rel="noopener noreferrer"' : '';
 	const now = Date.now();
 	const down = items.filter(i => i.s.status === 0).length;
 	const loading = items.filter(i => i.s.status === -1).length;
@@ -223,7 +231,7 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 			const label = sp >= 36 * 3_600_000 ? `${fmtDayTh(k.start)} - ${fmtDayTh(k.end - 1)}` : sp >= 20 * 3_600_000 ? fmtDayTh(k.end - 1) : fmtDateTh(k.start);
 			return `<i class="${cls}" title="${label}: ${tip}"></i>`;
 		}).join('');
-		return `<a class="svc" data-state="${st.key}" translate="no" href="/${encodeURIComponent(s.name)}?range=${range}">
+		return `<a class="svc" data-state="${st.key}" translate="no" href="/${encodeURIComponent(s.name)}?range=${range}"${linkTarget}>
 	<div class="who"><span class="dot"></span><div><div class="nm">${esc(displayName(s.name))}</div>
 		<div class="meta"><span class="st">${st.label}</span>${cur}${ping}${limited ? '<span class="tag" title="คำขอมากเกินไป (429) ระบบกำลังรอแล้วลองใหม่อัตโนมัติ">ติด Rate limit</span>' : ''}</div>
 		<div class="last">${lastLine(b)}</div></div></div>
@@ -237,7 +245,7 @@ export function renderIndex(items: Item[], limits: Record<string, number>, range
 	<div class="hl"><span class="pulse"></span><div><h1>${overall.title}</h1><p>${overall.sub}</p></div></div>
 	<div class="bigpct"><b>${fmtPct(total)}</b><span>uptime ${RANGE_LONG[range]}</span></div>
 </section>
-<div class="toolbar"><h2 class="tt">บริการทั้งหมด</h2>${rangeBar('/', range)}</div>
+<div class="toolbar"><h2 class="tt">บริการทั้งหมด</h2>${rangeBar(base, range)}</div>
 ${n ? `<section class="list glass">${rows}</section>` : ''}
 <div class="legend">
 	<span><i style="background:var(--ok)"></i>ไม่มี downtime</span>
@@ -245,7 +253,7 @@ ${n ? `<section class="list glass">${rows}</section>` : ''}
 	<span><i style="background:var(--down)"></i>ล่มนานกว่านั้น</span>
 	<span><i style="background:rgba(255,255,255,.12)"></i>ไม่มีข้อมูล</span>
 </div>`;
-	return shell('Yumi - สถานะระบบ', brand, main, overall.key);
+	return shell('Yumi - สถานะระบบ', embed ? '' : brand, main, overall.key, embed);
 }
 
 export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range): string {
