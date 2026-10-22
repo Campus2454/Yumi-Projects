@@ -1,244 +1,243 @@
 import cron from 'node-cron';
 import { send } from './send.js';
-import { backend, bot_main, database, frontend_main, checkAll as _checkAll } from './check.js';
+import { checkAll as _checkAll } from './check.js';
 import chalk from 'chalk';
 import { StatusData } from 'global/types';
 import express from 'express';
 import { capitalize, formatDuration } from 'global/common-functions';
-import sqlite3 from 'sqlite3';
+import Database from 'better-sqlite3';
 
-// การตั้งค่า Local DB สำหรับเก็บ Timeline การดาวน์
-const localDb = new sqlite3.Database('./timeline.db');
-localDb.run(`CREATE TABLE IF NOT EXISTS timeline (
-	id INTEGER PRIMARY KEY AUTOINCREMENT,
-	service_name TEXT,
-	status INTEGER,
-	timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-)`);
-localDb.run(`CREATE TABLE IF NOT EXISTS downtime_records (
-	service_name TEXT PRIMARY KEY,
-	total_downtime_sec INTEGER DEFAULT 0,
-	last_down_timestamp DATETIME
-)`);
+const db = new Database('local_status.db');
+db.exec(`
+  CREATE TABLE IF NOT EXISTS timeline (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    status INTEGER,
+    statusCode INTEGER,
+    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`);
 
-let allS: StatusData[] = [];
-let prevS: StatusData[] = [];
-let changedStatus: StatusData[] = [];
-const isDev = process.env.IS_DEV === 'true';
+export type LocalStatusData = StatusData & {
+	statusCode?: number;
+	computedUptime?: number;       
+	computedDowntime?: number;     
+	lastUptimeDuration?: number;   
+	lastDowntimeDuration?: number; 
+};
+
+let allS: LocalStatusData[] = [];
+let prevS: LocalStatusData[] = [];
+let isFirstRun = true; // ตัวแปรสำหรับเช็คการรันครั้งแรก
+const serviceState: Record<string, { status: number; statusSince: number; lastUpDuration: number; lastDownDuration: number }> = {};
+
+const isDev = true || process.env.IS_DEV === 'true';
 const port = isDev ? 30006 : 3006;
 const app = express();
 
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 const pretty = (name: string) => esc(capitalize(name.split('_').join(' ')));
-const stateOf = (s: number) => s === 1 ? { key: 'ok', label: 'Running' } : s === -1 ? { key: 'load', label: 'Loading' } : { key: 'down', label: 'Stopped' };
 
-// UI พรีเมียม ปรับสี กราเดียนต์ และเพิ่ม Glassmorphism
 const CSS = `
-:root {
-	--bg: #09090b; --surface: rgba(255,255,255,0.03); --line: rgba(255,255,255,0.08);
-	--text: #fafafa; --muted: #a1a1aa; --brand: #e11d48;
-	--ok: #10b981; --load: #3b82f6; --down: #ef4444; --c: var(--brand);
-	color-scheme: dark; box-sizing: border-box;
+:root{
+	--bg:#0b0d14; --surface:#151822; --line:#252936;
+	--text:#f8f9fa; --muted:#8f95a3; --ok:#10b981; --down:#ef4444; --load:#6366f1;
+	color-scheme:dark; box-sizing:border-box;
 }
-*,*::before,*::after { box-sizing: inherit }
-[data-state=ok]{--c:var(--ok)} [data-state=load]{--c:var(--load)} [data-state=down]{--c:var(--down)}
-html { min-height: 100%; background: var(--bg); }
-body {
-	margin: 0; min-height: 100vh; color: var(--text); font-family: 'Inter', 'Kanit', system-ui, sans-serif;
-	background: radial-gradient(circle at 15% 0%, rgba(225, 29, 72, 0.15), transparent 40%),
-				radial-gradient(circle at 85% 100%, rgba(16, 185, 129, 0.1), transparent 40%), var(--bg);
-	background-attachment: fixed;
-	padding: max(32px, env(safe-area-inset-top)) 24px max(32px, env(safe-area-inset-bottom));
+*,*::before,*::after{box-sizing:inherit}
+html{min-height:100%;background:var(--bg)}
+body{
+	margin:0;min-height:100vh;color:var(--text);font-family:'Kanit',system-ui,sans-serif;
+	background:var(--bg); padding:max(24px,env(safe-area-inset-top)) 20px;
 }
-a { color: inherit; text-decoration: none; }
-:focus-visible { outline: 2px solid #fff; outline-offset: 3px; border-radius: 12px; }
-.wrap { max-width: 960px; margin: 0 auto; }
-.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 48px; }
-.brand { display: flex; align-items: center; gap: 14px; font-weight: 600; font-size: 1.15rem; letter-spacing: -0.02em; }
-.brand img { width: 40px; height: 40px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
-.btns { display: flex; gap: 12px; }
-.btn {
-	width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px; cursor: pointer;
-	background: var(--surface); border: 1px solid var(--line); color: var(--text); 
-	backdrop-filter: blur(10px); transition: all 0.3s ease;
+a{color:inherit;text-decoration:none}
+.wrap{max-width:960px;margin:0 auto}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:30px}
+.brand{display:flex;align-items:center;gap:12px;font-weight:600;font-size:1.2rem;}
+.brand img{width:36px;height:36px;border-radius:10px;}
+.btns{display:flex;gap:10px}
+.btn{
+	width:40px;height:40px;display:grid;place-items:center;border-radius:8px;cursor:pointer;
+	background:var(--surface);border:1px solid var(--line);color:var(--text); transition:all .2s;
 }
-.btn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.2); transform: translateY(-2px); }
-.btn svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn:hover{background:#1f2331;}
+.btn svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;}
 
-/* ---------- index ---------- */
-.banner {
-	display: flex; align-items: center; gap: 24px; padding: 32px 36px; border-radius: 24px; margin-bottom: 36px;
-	background: linear-gradient(135deg, color-mix(in srgb, var(--c) 15%, transparent), rgba(255,255,255,0.02));
-	border: 1px solid color-mix(in srgb, var(--c) 30%, transparent);
-	backdrop-filter: blur(20px); box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+.grid{display:flex; flex-direction:column; gap:16px}
+.card{
+	display:flex;flex-direction:column;gap:16px;padding:20px;border-radius:12px;
+	background:var(--surface);border:1px solid var(--line); transition: border-color .2s;
 }
-.banner h1 { margin: 0; font-size: clamp(1.6rem, 5vw, 2.4rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.03em; }
-.banner p { margin: 8px 0 0; color: var(--muted); font-weight: 400; font-size: 1.05rem; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
-.card {
-	display: flex; flex-direction: column; gap: 20px; padding: 24px; border-radius: 20px;
-	background: rgba(255,255,255,0.02); border: 1px solid var(--line); backdrop-filter: blur(10px);
-	transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.card:hover { border-color: color-mix(in srgb, var(--c) 50%, transparent); background: rgba(255,255,255,0.04); transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.15); }
-.card .name { font-weight: 600; font-size: 1.25rem; letter-spacing: -0.01em; }
-.card .row { display: flex; align-items: center; justify-content: space-between; color: var(--muted); font-size: 0.95rem; font-weight: 400; }
-.card .state { display: flex; align-items: center; gap: 10px; color: var(--c); font-weight: 500; }
-.dot { width: 12px; height: 12px; border-radius: 50%; background: var(--c); box-shadow: 0 0 16px var(--c); flex: none; }
-.downtime-badge { margin-top: 12px; font-size: 0.85rem; color: var(--down); background: rgba(239, 68, 68, 0.1); padding: 6px 12px; border-radius: 8px; display: inline-block; }
+.card:hover{border-color:#3b4156;}
+.card-head{display:flex;justify-content:space-between;align-items:center;}
+.card-head .name{font-weight:600;font-size:1.15rem;display:flex;align-items:center;gap:8px;}
+.card-head .ping{color:var(--muted);font-size:.9rem;background:#1e2230;padding:4px 10px;border-radius:20px;}
+.dot{width:10px;height:10px;border-radius:50%;}
+.dot.ok{background:var(--ok);box-shadow:0 0 10px rgba(16,185,129,0.4);}
+.dot.down{background:var(--down);box-shadow:0 0 10px rgba(239,68,68,0.4);}
 
-/* ---------- detail ---------- */
-.hero { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 20px 0 48px; }
-.beacon { position: relative; width: 140px; height: 140px; display: grid; place-items: center; margin-bottom: 36px; }
-.core { width: 90px; height: 90px; border-radius: 50%; display: grid; place-items: center; background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--c) 60%, #fff), var(--c)); box-shadow: 0 0 80px color-mix(in srgb, var(--c) 50%, transparent); }
-.core svg { width: 42px; height: 42px; fill: none; stroke: var(--bg); stroke-width: 3; }
-.hero h1 { margin: 0; font-size: clamp(2.4rem, 8vw, 4rem); font-weight: 800; letter-spacing: -0.04em; }
-.pill { margin-top: 20px; padding: 8px 24px; border-radius: 999px; font-weight: 500; color: var(--c); background: color-mix(in srgb, var(--c) 10%, transparent); border: 1px solid color-mix(in srgb, var(--c) 30%, transparent); font-size: 1.1rem; }
-.metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
-.metric { padding: 24px; border-radius: 20px; background: rgba(255,255,255,0.02); border: 1px solid var(--line); backdrop-filter: blur(10px); }
-.metric .k { color: var(--muted); font-weight: 400; font-size: 0.95rem; text-transform: uppercase; letter-spacing: 0.05em; }
-.metric .v { margin-top: 10px; font-size: 1.8rem; font-weight: 700; letter-spacing: -0.02em; }
-.foot { margin-top: 48px; text-align: center; color: var(--muted); font-size: 0.9rem; font-weight: 400; opacity: 0.7; }
+.bars{display:flex; gap:3px; height:34px; align-items:flex-end;}
+.bar{flex:1; background:#2c3142; border-radius:2px; height:100%; transition:height .3s; min-width:4px;}
+.bar.ok{background:var(--ok);}
+.bar.down{background:var(--down); height:60%;}
+
+.card-foot{display:flex;justify-content:space-between;color:var(--muted);font-size:.9rem; margin-top:4px;}
+.pill-status{font-weight:600;} .pill-status.ok{color:var(--ok);} .pill-status.down{color:var(--down);}
+
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin:30px 0;}
+.metric{padding:20px;border-radius:12px;background:var(--surface);border:1px solid var(--line);}
+.metric .k{color:var(--muted);font-size:.9rem;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;}
+.metric .v{font-size:1.6rem;font-weight:600;}
+
+.timeline{background:var(--surface);border-radius:12px;border:1px solid var(--line);padding:20px;}
+.t-row{display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line);font-size:.95rem;}
+.t-row:last-child{border-bottom:none;}
 `;
 
 const ICON = {
 	back: '<svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
-	refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg>',
-	ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
-	load: '<svg viewBox="0 0 24 24"><path d="M12 6v6l4 2"/></svg>',
-	down: '<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>',
+	refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg>'
 };
 
-const shell = (title: string, body: string, state = '') => `<!doctype html>
-<html lang="th">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>${title}</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet" />
-<style>${CSS}</style>
-</head>
-<body>
-<div class="wrap"${state ? ` data-state="${state}"` : ''}>
-${body}
-</div>
-<script>setTimeout(function(){location.reload()},10000)</script>
-</body>
-</html>`;
+const shell = (title: string, body: string) => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${title}</title><link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet" /><style>${CSS}</style></head>
+<body><div class="wrap">${body}</div><script>setTimeout(function(){location.reload()},30000)</script></body></html>`;
 
-export function renderIndex(list: StatusData[], downtimeData: Record<string, number>): string {
-	const down = list.filter(s => s.status === 0).length;
-	const loading = list.filter(s => s.status === -1).length;
-
-	const overall = list.length === 0
-		? { key: 'load', title: 'Checking services…', sub: 'กำลังตรวจสอบระบบ' }
-		: down > 0
-			? { key: 'down', title: down === list.length ? 'ระบบขัดข้องทั้งหมด' : `พบปัญหา ${down} จาก ${list.length} ระบบ`, sub: 'ทีมงานกำลังดำเนินการแก้ไข' }
-			: loading > 0
-				? { key: 'load', title: 'กำลังเริ่มต้นระบบ', sub: `กำลังโหลด ${loading} ระบบ` }
-				: { key: 'ok', title: 'ระบบทำงานปกติ', sub: `ตอบสนองปกติทั้ง ${list.length} ระบบ` };
-
+export function renderIndex(list: LocalStatusData[]): string {
 	const cards = list.map(s => {
-		const st = stateOf(s.status);
-		const downTime = downtimeData[s.name] || 0;
-		return `<a class="card" data-state="${st.key}" translate="no" href="/${encodeURIComponent(s.name)}">
-	<div class="name">${pretty(s.name)}</div>
-	<div class="row">
-		<span class="state"><span class="dot"></span>${st.label}</span>
-		<span>${s.ping ? `${s.ping} ms` : 'N/A'}</span>
-	</div>
-	${downTime > 0 ? `<div class="downtime-badge">Downtime รวม: ${formatDuration(downTime * 1000, 'th', 'short')}</div>` : ''}
-</a>`;
+		const isUp = s.status === 1;
+		const statusText = isUp ? 'Operational' : 'Major Outage';
+		const durationText = isUp 
+            ? `Uptime: ${formatDuration((s.computedUptime || 0) * 1000, 'en-US', 'short')}`
+            : `Downtime: ${formatDuration((s.computedDowntime || 0) * 1000, 'en-US', 'short')}`;
+
+        const history = db.prepare(`SELECT status FROM timeline WHERE name = ? ORDER BY timestamp DESC LIMIT 40`).all(s.name) as any[];
+        const bars = Array.from({ length: 40 }).map((_, i) => {
+            const h = history[39 - i]; 
+            if (!h) return `<div class="bar"></div>`;
+            return `<div class="bar ${h.status === 1 ? 'ok' : 'down'}" title="${h.status === 1 ? 'Online' : 'Offline'}"></div>`;
+        }).join('');
+
+		return `<a class="card" href="/${encodeURIComponent(s.name)}">
+            <div class="card-head">
+                <div class="name"><span class="dot ${isUp ? 'ok' : 'down'}"></span>${pretty(s.name)}</div>
+                <div class="ping">${s.ping ? `${s.ping} ms` : 'N/A'}</div>
+            </div>
+            <div class="bars">${bars}</div>
+            <div class="card-foot">
+                <span class="pill-status ${isUp ? 'ok' : 'down'}">${statusText}</span>
+                <span>${durationText}</span>
+            </div>
+        </a>`;
 	}).join('\n');
 
-	return shell('Yumi - System Status', `
+	return shell('Yumi - Status', `
 <header class="top">
-	<div class="brand"><img src="https://assets.yumistack.net/photos/logo/yumi/001.webp" alt="" />Yumi System Status</div>
+	<div class="brand"><img src="https://assets.yumistack.net/photos/logo/yumi/001.webp" alt="" />YUMI CLOUD</div>
 </header>
-<section class="banner" data-state="${overall.key}">
-	<span class="dot" style="width:16px;height:16px"></span>
-	<div><h1>${overall.title}</h1><p>${overall.sub}</p></div>
-</section>
-${list.length ? `<section class="grid">${cards}</section>` : '<div class="empty">ยังไม่มีข้อมูล</div>'}
-<p class="foot">อัปเดตอัตโนมัติทุก 10 วินาที</p>`, overall.key);
+${list.length ? `<section class="grid">${cards}</section>` : '<div style="text-align:center;padding:50px;color:var(--muted)">No services tracked yet.</div>'}
+<p style="text-align:center;color:var(--muted);font-size:.85rem;margin-top:40px;">Updated automatically every 30s</p>`);
 }
 
-export function renderDetail(s: StatusData, downtimeSec: number): string {
-	const st = stateOf(s.status);
-	const na = (v: unknown, f: (x: any) => string) => (v ? `<div class="v">${esc(f(v))}</div>` : '<div class="v" style="opacity:0.3">N/A</div>');
+export function renderDetail(s: LocalStatusData): string {
+	const isUp = s.status === 1;
+	const na = (v: unknown, f: (x: any) => string) => (v ? `<div class="v">${esc(f(v))}</div>` : '<div class="v" style="color:var(--muted)">N/A</div>');
 
-	return shell(`Yumi - ${esc(s.name)}`, `
+	const history = db.prepare(`SELECT * FROM timeline WHERE name = ? ORDER BY timestamp DESC LIMIT 8`).all(s.name) as any[];
+	const historyHtml = history.map(h => `
+        <div class="t-row">
+            <span>${new Date(h.timestamp).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}</span>
+            <span style="color:var(--${h.status === 1 ? 'ok' : 'down'})">${h.status === 1 ? 'UP' : 'DOWN'} (Code: ${h.statusCode || 'N/A'})</span>
+        </div>
+    `).join('') || '<div style="color:var(--muted)">No history available.</div>';
+
+	return shell(`Yumi - Status (${esc(s.name)})`, `
 <header class="top">
-	<div class="btns">
-		<a class="btn" href="/" target="_top">${ICON.back}</a>
-		<button class="btn" onclick="location.reload()">${ICON.refresh}</button>
-	</div>
-	<div class="brand">Yumi</div>
+	<div class="btns"><a class="btn" href="/">${ICON.back}</a><button class="btn" onclick="location.reload()">${ICON.refresh}</button></div>
+	<div class="brand">${pretty(s.name)}</div>
 </header>
-<section class="hero">
-	<div class="beacon"><div class="core">${ICON[st.key as 'ok' | 'load' | 'down']}</div></div>
-	<h1 translate="no">${pretty(s.name)}</h1>
-	<div class="pill">${st.label}</div>
-</section>
+<div style="text-align:center; padding:30px 0;">
+    <h1 style="margin:0; font-size:3rem; color:var(--${isUp ? 'ok' : 'down'})">${isUp ? 'Operational' : 'Outage'}</h1>
+    <p style="color:var(--muted); margin-top:8px;">${isUp ? 'All systems are responding normally.' : 'Service is currently unreachable.'}</p>
+</div>
 <section class="metrics">
 	<div class="metric"><div class="k">Ping</div>${na(s.ping, v => `${v} ms`)}</div>
-	<div class="metric"><div class="k">Uptime</div>${na(s.uptime, v => formatDuration(v * 1000, 'en-US', 'short'))}</div>
-	<div class="metric"><div class="k">Total Downtime</div><div class="v">${downtimeSec > 0 ? formatDuration(downtimeSec * 1000, 'th', 'short') : '0 วิ'}</div></div>
-</section>`, st.key);
-}
-
-// การจัดการลง Timeline และคำนวณ Downtime
-function updateTimelineAndDowntime(currentStatus: StatusData[]) {
-	const now = new Date().toISOString();
-	currentStatus.forEach(s => {
-		localDb.run(`INSERT INTO timeline (service_name, status, timestamp) VALUES (?, ?, ?)`, [s.name, s.status, now]);
-
-		localDb.get(`SELECT * FROM downtime_records WHERE service_name = ?`, [s.name], (err, row: any) => {
-			if (s.status === 0) {
-				if (!row) {
-					localDb.run(`INSERT INTO downtime_records (service_name, last_down_timestamp) VALUES (?, ?)`, [s.name, Date.now()]);
-				} else if (!row.last_down_timestamp) {
-					localDb.run(`UPDATE downtime_records SET last_down_timestamp = ? WHERE service_name = ?`, [Date.now(), s.name]);
-				} else {
-					const diff = Math.floor((Date.now() - row.last_down_timestamp) / 1000);
-					localDb.run(`UPDATE downtime_records SET total_downtime_sec = total_downtime_sec + ?, last_down_timestamp = ? WHERE service_name = ?`, [diff, Date.now(), s.name]);
-				}
-			} else {
-				if (row && row.last_down_timestamp) {
-					localDb.run(`UPDATE downtime_records SET last_down_timestamp = NULL WHERE service_name = ?`, [s.name]);
-				}
-			}
-		});
-	});
+    ${isUp ? `
+        <div class="metric"><div class="k">Current Uptime</div>${na(s.computedUptime, v => formatDuration(v * 1000, 'en-US', 'short'))}</div>
+        <div class="metric"><div class="k">Last Downtime</div>${na(s.lastDowntimeDuration, v => formatDuration(v * 1000, 'en-US', 'short'))}</div>
+    ` : `
+        <div class="metric"><div class="k">Current Downtime</div>${na(s.computedDowntime, v => formatDuration(v * 1000, 'en-US', 'short'))}</div>
+        <div class="metric"><div class="k">Last Uptime</div>${na(s.lastUptimeDuration, v => formatDuration(v * 1000, 'en-US', 'short'))}</div>
+    `}
+</section>
+<section class="timeline">
+    <h2 style="margin-top:0; font-size:1.2rem">Latest Events</h2>
+    ${historyHtml}
+</section>`);
 }
 
 async function checkAll() {
-	console.log(`${chalk.gray(`[${(new Date()).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok' })}]`)} Checking status...`);
 	try {
-		allS = await _checkAll(false);
-		updateTimelineAndDowntime(allS);
+		const rawStatus = await _checkAll(false);
+		const now = Date.now();
 
-		changedStatus = allS.filter(current => {
-			const prevStatus = prevS.find(s => s.name === current.name)?.status;
-			return prevStatus !== current.status;
+		allS = rawStatus.map((current: any) => {
+			if (!serviceState[current.name]) {
+				serviceState[current.name] = { status: current.status, statusSince: now, lastUpDuration: 0, lastDownDuration: 0 };
+			}
+			const state = serviceState[current.name];
+
+			const prev = prevS.find(p => p.name === current.name);
+			if (prev && prev.status !== current.status) {
+                const durationSeconds = Math.floor((now - state.statusSince) / 1000);
+				if (prev.status === 1) state.lastUpDuration = durationSeconds;
+				if (prev.status === 0) state.lastDownDuration = durationSeconds;
+
+                state.status = current.status;
+                state.statusSince = now;
+
+				db.prepare(`INSERT INTO timeline (name, status, statusCode) VALUES (?, ?, ?)`).run(current.name, current.status, current.statusCode || null);
+			} else if (!prev) { 
+                db.prepare(`INSERT INTO timeline (name, status, statusCode) VALUES (?, ?, ?)`).run(current.name, current.status, current.statusCode || null);
+            }
+
+            const currentDuration = Math.floor((now - state.statusSince) / 1000);
+            
+			return { 
+                ...current, 
+                computedUptime: current.status === 1 ? currentDuration : undefined, 
+                computedDowntime: current.status === 0 ? currentDuration : undefined,
+                lastUptimeDuration: state.lastUpDuration,
+                lastDowntimeDuration: state.lastDownDuration
+            };
 		});
 
-		if (changedStatus.length > 0) {
-			await send(true, undefined, false, changedStatus);
-		};
+		// ส่งแจ้งเตือนครั้งแรกที่เริ่มต้น หรือส่งเฉพาะอันที่เปลี่ยนสถานะ
+		if (isFirstRun) {
+			isFirstRun = false;
+			await send(true, true, true, allS); // ครั้งแรกส่งรายงานฉบับเต็มทั้ง Discord & Mail
+		} else {
+			const changedStatus = allS.filter(current => {
+				const prevStatus = prevS.find(s => s.name === current.name)?.status;
+				return prevStatus !== undefined && prevStatus !== current.status;
+			});
 
-		if (allS.some(s => s.status === 0)) throw new Error('Some service down');
+			if (changedStatus.length > 0) {
+				await send(true, true, false, changedStatus); 
+			}
+		}
+
 	} catch (err: any) {
 		console.error(`Error during status check: ${err}`);
 	} finally {
 		prevS = [...allS];
 	}
-};
+}
 
 (async () => {
 	while (true) {
-		try { await checkAll(); } catch (e) { console.error(e); }
-		await new Promise(res => setTimeout(res, 10000)); // ปรับเวลาเป็น 10 วิเพื่อป้องกันการ Query ถี่เกิน
+		try { await checkAll(); } catch (e) {}
+		await new Promise(res => setTimeout(res, 20000));
 	}
 })();
 
@@ -248,34 +247,26 @@ app.use((req, res, next) => {
 	if (req.method === 'OPTIONS') {
 		res.sendStatus(200);
 		return;
-	};
+	}
 	next();
 });
 
 app.get('/', (req, res) => {
-	localDb.all(`SELECT service_name, total_downtime_sec FROM downtime_records`, (err, rows: any[]) => {
-		const downtimeData: Record<string, number> = {};
-		if (rows) rows.forEach(r => downtimeData[r.service_name] = r.total_downtime_sec);
-		res.send(renderIndex(allS, downtimeData));
-	});
+	res.send(renderIndex(allS));
 });
 
 app.get(`/:name`, (req, res) => {
 	const status = allS.find(s => s.name === req.params.name);
 	if (!status) {
-		res.status(404).send(shell('Not Found', '<h1>Not found</h1>'));
-		return;
-	};
-	
-	localDb.get(`SELECT total_downtime_sec FROM downtime_records WHERE service_name = ?`, [status.name], (err, row: any) => {
-		res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, row?.total_downtime_sec || 0));
-	});
+		res.status(404).send(shell('Not Found', '<div style="text-align:center; padding:100px"><h1>404 Not Found</h1></div>'));
+	} else {
+		res.status(status.status === 1 ? 200 : 503).send(renderDetail(status));
+	}
 });
 
 try {
-	app.listen(port, () => console.log(`Status server running on PORT: ${port}`));
-} catch (err) {
-	console.log(err);
-}
+	app.listen(port, () => console.log(`[+] Status server running on PORT: ${port}`));
+} catch (err) {}
 
-cron.schedule('0 12 * * *', () => send());
+// ตั้งเวลาส่ง 19:00 น. ประเทศไทย (12:00 UTC)
+cron.schedule('0 12 * * *', () => send(true, true, true, allS));
