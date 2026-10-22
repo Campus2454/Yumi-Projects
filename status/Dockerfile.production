@@ -43,7 +43,8 @@ ENV HOST=0.0.0.0
 
 RUN yarn install
 
-COPY --from=builder /app/status/build ./build
+COPY --from=builder /app/global/build ./global/build
+COPY --from=builder /app/status/build ./status/build
 
 EXPOSE 3006
 
