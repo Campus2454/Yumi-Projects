@@ -4,7 +4,8 @@ import type { StatusData } from 'global/types';
 /**
  * ประวัติสถานะเก็บใน PostgreSQL (DATABASE_URL)
  * - segments: ช่วงเวลาที่ service อยู่ในสถานะหนึ่ง (1 = running, 0 = down, -1 = loading) เก็บถาวร
- * - pings:    ตัวอย่าง ping ทุก 60 วินาที (เก็บ 90 วัน)
+ * - pings:    ตัวอย่าง ping ทุก 60 วินาที (เก็บ 90 วัน) ใช้สำหรับสถิติเดิม
+ * - samples:  ตัวอย่างทุก SAMPLE_EVERY_MS: ping, uptime, cpu, ram, version (เก็บ 90 วัน) ใช้สำหรับกราฟ
  *
  * ต้องเรียก `await initHistory()` ก่อนเริ่มรับ request หรือเช็คสถานะ
  */
@@ -12,9 +13,12 @@ const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 const TOUCH_MS = 10_000;
 const PING_EVERY_MS = 60_000;
+const SAMPLE_EVERY_MS = 10_000;
 const PRUNE_EVERY_MS = HOUR;
 const SEG_KEEP_MS = 3650 * DAY;
 const PING_KEEP_MS = 90 * DAY;
+const SAMPLE_KEEP_MS = 90 * DAY;
+const SERIES_POINTS = 300;
 
 export type Range = '24h' | '7d' | '30d' | 'all';
 export const RANGE_LIST: Range[] = ['24h', '7d', '30d', 'all'];
@@ -64,6 +68,19 @@ export function initHistory(): Promise<void> {
 					ping INTEGER NOT NULL
 				);
 				CREATE INDEX IF NOT EXISTS idx_pings_service_ts ON pings(service, ts);
+				CREATE TABLE IF NOT EXISTS samples(
+					service TEXT NOT NULL,
+					ts BIGINT NOT NULL,
+					status SMALLINT NOT NULL,
+					ping INTEGER,
+					uptime BIGINT,
+					version TEXT,
+					cpu REAL,
+					mem_used BIGINT,
+					mem_total BIGINT,
+					mem_percent REAL,
+					PRIMARY KEY (service, ts)
+				);
 			`);
 			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ ให้ปิดที่เวลาที่เห็นล่าสุด (ไม่นับเป็น downtime)
 			await pool.query(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`);
@@ -76,6 +93,7 @@ export function initHistory(): Promise<void> {
 /* ---------- การเขียน (cache สถานะที่เปิดอยู่ในหน่วยความจำ ลดการ query) ---------- */
 const open = new Map<string, { id: string; status: number; touched: number }>();
 const lastPing = new Map<string, number>();
+const lastSample = new Map<string, number>();
 let lastPrune = 0;
 let writing: Promise<void> = Promise.resolve();
 
@@ -106,6 +124,24 @@ async function write(list: StatusData[], now: number) {
 				await client.query(`INSERT INTO pings(service, ts, ping) VALUES ($1, $2, $3)`, [s.name, now, Math.round(s.ping)]);
 				lastPing.set(s.name, now);
 			}
+			if (now - (lastSample.get(s.name) ?? 0) >= SAMPLE_EVERY_MS) {
+				const r = s.resources;
+				await client.query(
+					`INSERT INTO samples(service, ts, status, ping, uptime, version, cpu, mem_used, mem_total, mem_percent)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) ON CONFLICT (service, ts) DO NOTHING`,
+					[
+						s.name, now, s.status,
+						typeof s.ping === 'number' ? Math.round(s.ping) : null,
+						typeof s.uptime === 'number' ? Math.round(s.uptime) : null,
+						s.version ?? null,
+						r?.cpu?.percent ?? null,
+						r?.memory?.used ?? null,
+						r?.memory?.total ?? null,
+						r?.memory?.percent ?? null,
+					],
+				);
+				lastSample.set(s.name, now);
+			}
 		}
 		await client.query('COMMIT');
 	} catch (e) {
@@ -120,6 +156,7 @@ async function write(list: StatusData[], now: number) {
 		lastPrune = now;
 		await pool.query(`DELETE FROM segments WHERE ended_at IS NOT NULL AND ended_at < $1`, [now - SEG_KEEP_MS]);
 		await pool.query(`DELETE FROM pings WHERE ts < $1`, [now - PING_KEEP_MS]);
+		await pool.query(`DELETE FROM samples WHERE ts < $1`, [now - SAMPLE_KEEP_MS]);
 	}
 }
 
@@ -161,6 +198,45 @@ export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> 
 		}
 	}
 	return { state, since, ms: since !== null ? Math.max(0, now - since) : null, last };
+}
+
+/* ------------------------------------------------------------------ */
+/*  Series: ข้อมูลสำหรับกราฟ (รวมเป็น SERIES_POINTS จุดในช่วงเวลา)        */
+/* ------------------------------------------------------------------ */
+export interface SeriesPoint { ts: number; cpu: number | null; mem: number | null; ping: number | null; status: number | null }
+
+/** คืน SERIES_POINTS + 1 จุดเสมอ ช่วงที่ไม่มีข้อมูลเป็น null (กราฟจะขาดตรงนั้น) */
+export async function getSeries(service: string, range: Range = '24h', now = Date.now()): Promise<SeriesPoint[]> {
+	await initHistory();
+	const span = range === 'all' ? SAMPLE_KEEP_MS : RANGE_MS[range as '24h' | '7d' | '30d'];
+	const from = now - span;
+	const size = Math.max(span / SERIES_POINTS, 1000);
+
+	const rows = (await pool.query<{ k: number; cpu: number | null; mem: number | null; ping: number | null; st: number | null }>(
+		`SELECT FLOOR((ts - $2::bigint)::float8 / $3::float8)::int AS k,
+		        AVG(cpu)::float8 AS cpu,
+		        AVG(mem_percent)::float8 AS mem,
+		        AVG(ping)::float8 AS ping,
+		        MIN(status)::int AS st
+		 FROM samples
+		 WHERE service = $1 AND ts >= $2::bigint
+		 GROUP BY k`,
+		[service, from, size],
+	)).rows;
+
+	const byK = new Map(rows.map(r => [r.k, r]));
+	const out: SeriesPoint[] = [];
+	for (let k = 0; k <= SERIES_POINTS; k++) {
+		const r = byK.get(k);
+		out.push({
+			ts: from + k * size + size / 2,
+			cpu: r?.cpu == null ? null : Math.round(r.cpu * 10) / 10,
+			mem: r?.mem == null ? null : Math.round(r.mem * 10) / 10,
+			ping: r?.ping == null ? null : Math.round(r.ping),
+			status: r?.st ?? null,
+		});
+	}
+	return out;
 }
 
 /* ------------------------------------------------------------------ */

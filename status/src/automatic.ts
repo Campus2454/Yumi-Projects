@@ -1,10 +1,11 @@
 import cron from 'node-cron';
 import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
-import { recordStatus, getReport, getBrief, parseRange, initHistory } from './history.js';
+import { recordStatus, getReport, getBrief, getSeries, parseRange, initHistory } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
 import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSubscribers } from './subscribers.js';
 import { renderSubscribePage, renderConfirmResult, renderUnsubResult } from './subscribe-page.js';
+import { renderMetricsPage } from './chart.js';
 import chalk from 'chalk';
 import { StatusData } from 'global/types';
 import express from 'express';
@@ -16,12 +17,15 @@ const isDev = process.env.IS_DEV === 'true';
 const port = isDev ? 30006 : 3006;
 const app = express();
 
+/** service ที่มีกราฟ */
+const METRIC_SERVICES = ['bot', 'backend', 'frontend_main', 'database'];
+
 async function checkAll() {
 	console.log(`${chalk.gray(`[${(new Date()).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', })}]`)} Checking status...`);
 	try{
 		allS = await _checkAll(false);
 
-		// บันทึก timeline (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
+		// บันทึก timeline และตัวอย่างค่า (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
 		recordStatus(allS);
 
 		changedStatus = allS.filter(current => {
@@ -93,6 +97,20 @@ app.get('/api/status', wrap(async (req, res) => {
 	res.json(out);
 }));
 
+// JSON ข้อมูลกราฟ: /api/metrics?service=bot&range=24h
+app.get('/api/metrics', wrap(async (req, res) => {
+	const service = String(req.query.service ?? '');
+	if (!METRIC_SERVICES.includes(service)) { res.status(400).json({ error: 'unknown service' }); return; }
+	res.json(await getSeries(service, parseRange(req.query.range)));
+}));
+
+// หน้ากราฟ CPU / RAM / Ping: /metrics?range=24h|7d|30d|all
+app.get('/metrics', wrap(async (req, res) => {
+	const range = parseRange(req.query.range);
+	const entries = await Promise.all(METRIC_SERVICES.map(async n => [n, await getSeries(n, range)] as const));
+	res.send(renderMetricsPage(Object.fromEntries(entries), range));
+}));
+
 // หน้าสำหรับฝังใน iframe: เหมือนหน้าแรกแต่ไม่มีพื้นหลัง และลิงก์รายละเอียดเปิดแท็บใหม่
 app.get('/iframe', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
@@ -132,6 +150,7 @@ app.all('/subscribe/unsubscribe', wrap(async (req, res) => {
 	res.send(renderUnsubResult(ok));
 }));
 
+// ต้องอยู่หลัง /metrics และ /api/* เพื่อไม่ให้ถูกจับเป็นชื่อ service
 app.get(`/:name`, wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const status = allS.find(s => s.name === req.params.name);
