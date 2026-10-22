@@ -46,5 +46,6 @@ export const getGuildOverview = (guildId: string) => getGuildPage<GuildOverviewD
 export const getGuildSettings = (guildId: string) => getGuildPage<GuildSettingsDTO>(guildId, 'settings');
 export const getGuildWelcome = (guildId: string) => getGuildPage<GuildWelcomeDTO>(guildId, 'welcome');
 
-type statusPath = 'bot' | 'backend' | 'frontend_main' | 'database';
-export const getStatus = (path: statusPath) => axios.get(`${process.env.NEXT_PUBLIC_STATUS_DOMAIN}/${path}`);
+export const apiStatusPaths = [ "bot", "backend", "frontend_main", "database", ] as const;
+export type apiStatusPath = (typeof apiStatusPaths)[number];
+export const getStatus = (path: apiStatusPath) => axios.get(`${process.env.NEXT_PUBLIC_STATUS_DOMAIN}/${path}`);

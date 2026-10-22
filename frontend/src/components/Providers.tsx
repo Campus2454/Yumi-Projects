@@ -9,6 +9,7 @@ import { GuildInfo, User } from '../utils/types';
 import { ErrorPopup } from '../utils/styles';
 import { MdClose } from 'react-icons/md';
 import { useHideLoading } from '../utils/hooks/useHideLoading';
+import { OfflineAlert } from './OfflineAlert';
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [guild, setGuild] = useState<GuildInfo>();
@@ -34,19 +35,23 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ErrorPopupContext.Provider value={{ errorPopup, updateErrorPopup }}>
     <UserContext.Provider value={{ user, loadingUser, userError, updateUser, updateLoadingUser, updateUserError }}>
-        <GuildContext.Provider value={{ guild, updateGuild }}>
+    <GuildContext.Provider value={{ guild, updateGuild }}>
 
-      <ErrorPopup $show={errorPopup?.show} onClick={() => updateErrorPopup({ ...errorPopup, show: false })}>
-        {errorPopup?.title || errorPopup?.message ? (<div onClick={(e) => e.stopPropagation()}>
-          {errorPopup?.title && <h1>{errorPopup.title}</h1>}
-          {errorPopup?.message && <h2>{errorPopup.message}</h2>}
-          <MdClose id='close' onClick={() => updateErrorPopup({ ...errorPopup, show: false })}/>
-        </div>) : <></>}
-      </ErrorPopup>
-      
-      <div><AppBar /><div className="preLoaderBar backdrop-blur" id="PreLoaderBar"><div className="progress"><div className="indeterminate"></div></div></div></div>
-      {children}
-      <Footer/>
+    <ErrorPopup $show={errorPopup?.show} onClick={() => updateErrorPopup({ ...errorPopup, show: false })}>
+      {errorPopup?.title || errorPopup?.message ? (<div onClick={(e) => e.stopPropagation()}>
+        {errorPopup?.title && <h1>{errorPopup.title}</h1>}
+        {errorPopup?.message && <h2>{errorPopup.message}</h2>}
+        <MdClose id='close' onClick={() => updateErrorPopup({ ...errorPopup, show: false })}/>
+      </div>) : <></>}
+    </ErrorPopup>
+    
+    <div>
+      <AppBar />
+      <div className="preLoaderBar backdrop-blur" id="PreLoaderBar"><div className="progress"><div className="indeterminate"></div></div></div>
+    </div>
+    <OfflineAlert />
+    {children}
+    <Footer/>
 
     </GuildContext.Provider>
     </UserContext.Provider>
