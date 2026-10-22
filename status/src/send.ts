@@ -1,121 +1,97 @@
 import 'dotenv/config';
-import { formatDataSize, formatDuration } from 'global/common-functions';
+import { formatDataSize } from 'global/common-functions';
 import { Client, GatewayIntentBits, GuildTextBasedChannel, MessageFlags, ContainerBuilder, TextDisplayBuilder } from 'discord.js';
-import nodemailer from 'nodemailer';
-import { LocalStatusData } from './automatic.js';
 import { backend, bot_main, database, frontend_main } from './check.js';
+import { getBrief, type Brief } from './history.js';
+import { displayName, fmtDurTh } from './format.js';
+import { sendStatusMail, type MailItem } from './mail.js';
+import { StatusData } from 'global/types';
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-});
+const CHANNEL_ID = '1399765608106688745';
+const ALERT_ROLE = '<@&1227999302278713407>';
 
-export async function send(to_discord: boolean = true, to_mail: boolean = true, full: boolean = true, data?: LocalStatusData[]) {
-	const getName = (n: string) => n.split('_').map(n=>n.charAt(0).toUpperCase()+n.slice(1).toLowerCase()).join(' ');
+const ts = (t: number, f: 'f' | 'R' = 'f') => `<t:${Math.floor(t / 1000)}:${f}>`;
+/** บรรทัดรายการ: ถ้าไม่มีข้อมูลจะเป็นตัวเล็กสีจาง (-#) เหมือนเดิม */
+const row = (label: string, value: string | null | undefined) => `${value == null ? '-# ' : ''}- **${label}**: ${value ?? 'N/A'}`;
 
-    const statusData = data || (await Promise.all([bot_main(), database(), frontend_main(), backend()])) as LocalStatusData[];
+function body(s: StatusData, b: Brief): string {
+	const L: string[] = [];
+	L.push(s.status === 1 ? '**:green_circle:  กำลังทำงาน**' : s.status === -1 ? '**:blue_circle:  กำลังเริ่มระบบ**' : '**:red_circle:  หยุดทำงาน**');
 
-    if (to_mail && process.env.SMTP_USER && statusData.length > 0) {
-        try {
-            const emailRows = statusData.map(v => {
-                const isUp = v.status === 1;
-                const color = isUp ? '#10b981' : '#ef4444';
-                const statusTxt = isUp ? 'Operational' : 'Outage';
-                
-                let durationHtml = '';
-                if (isUp) {
-                    durationHtml = `<br/><b>Current Uptime:</b> ${v.computedUptime ? formatDuration(v.computedUptime * 1000, 'en-US', 'short') : 'N/A'}`;
-                    if (v.lastDowntimeDuration) durationHtml += ` | <b>Last Downtime:</b> ${formatDuration(v.lastDowntimeDuration * 1000, 'en-US', 'short')}`;
-                } else {
-                    durationHtml = `<br/><b>Current Downtime:</b> ${v.computedDowntime ? formatDuration(v.computedDowntime * 1000, 'en-US', 'short') : 'N/A'}`;
-                    if (v.lastUptimeDuration) durationHtml += ` | <b>Last Uptime:</b> ${formatDuration(v.lastUptimeDuration * 1000, 'en-US', 'short')}`;
-                }
+	if (b.state === 'up') {
+		// กำลังทำงาน -> Uptime + Downtime ล่าสุด
+		L.push(row('Uptime', b.ms !== null ? fmtDurTh(b.ms) : null));
+		L.push(b.last
+			? row('Downtime ล่าสุด', `${fmtDurTh(b.last.duration)} (${ts(b.last.end, 'R')})`)
+			: '- **Downtime ล่าสุด**: ยังไม่เคยล่มตั้งแต่เริ่มบันทึก');
+	} else if (b.state === 'down') {
+		// หยุดทำงาน -> Downtime + Uptime ล่าสุด
+		L.push(row('Downtime', b.ms !== null && b.since !== null ? `${fmtDurTh(b.ms)} (ตั้งแต่ ${ts(b.since, 'R')})` : null));
+		L.push(row('Uptime ล่าสุด', b.last ? `${fmtDurTh(b.last.duration)} (จนถึง ${ts(b.last.end, 'f')})` : null));
+	}
 
-                return `
-                <div style="background: #ffffff; padding: 20px; border-radius: 12px; border-left: 6px solid ${color}; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
-                    <h3 style="margin: 0 0 10px 0; color: #1f2937; font-size: 18px;">${getName(v.name)}</h3>
-                    <p style="margin: 0; color: #4b5563; font-size: 14px;">
-                        Status: <strong style="color: ${color}">${statusTxt}</strong> 
-                        ${v.statusCode ? `(Code: ${v.statusCode})` : ''}
-                        ${durationHtml}
-                    </p>
-                </div>`;
-            }).join('');
+	L.push(row('Ping', typeof s.ping === 'number' ? `${s.ping} ms` : null));
+	if (s.resources?.cpu || s.resources?.memory) {
+		L.push(row('CPU', s.resources?.cpu ? `${s.resources.cpu.percent}%` : null));
+		L.push(row('หน่วยความจำ', s.resources?.memory
+			? `${formatDataSize('byte', s.resources.memory.used, 'short')} / ${formatDataSize('byte', s.resources.memory.total, 'short')} \`(${s.resources.memory.percent}%)\``
+			: null));
+	}
+	return L.join('\n');
+}
 
-            const mailHtml = `
-            <div style="font-family: Arial, sans-serif; background-color: #f3f4f6; padding: 40px 20px;">
-                <div style="max-width: 600px; margin: 0 auto;">
-                    <div style="text-align: center; margin-bottom: 30px;">
-                        <h1 style="color: #111827; margin: 0;">Yumi Status Alert</h1>
-                        <p style="color: #6b7280; margin-top: 5px;">Automated infrastructure monitoring</p>
-                    </div>
-                    ${emailRows}
-                    <div style="text-align: center; margin-top: 30px; color: #9ca3af; font-size: 12px;">
-                        <p>You received this email because you are subscribed to Yumi Status alerts.</p>
-                    </div>
-                </div>
-            </div>`;
+function buildComponents(items: MailItem[], full: boolean) {
+	const now = Date.now();
+	const anyDown = items.some(i => i.s.status === 0);
+	const head = [
+		new TextDisplayBuilder().setContent(`${anyDown ? `${ALERT_ROLE}\n` : ''}# Yumi Status`),
+		new TextDisplayBuilder().setContent(`${full ? 'รายงานสถานะประจำวัน' : 'แจ้งเตือนการเปลี่ยนแปลงสถานะ'}\n-# ${ts(now, 'f')}`),
+	];
+	const cards = items.map(({ s, b }) =>
+		new ContainerBuilder()
+			.setAccentColor(s.status === 1 ? 0x32cd32 : s.status === -1 ? 0x4cc9f0 : 0xff4c4c)
+			.addTextDisplayComponents(t => t.setContent(`## ${displayName(s.name)}`))
+			.addTextDisplayComponents(t => t.setContent(body(s, b)))
+	);
+	return [...head, ...cards];
+}
 
-            await transporter.sendMail({
-                from: '"Yumi Monitor" <no-reply@yumistack.net>',
-                to: 'thirphathrphlphun@gmail.com',
-                subject: `[Yumi] Alert: Service Status Update`,
-                html: mailHtml
-            });
-            console.log('✅ Email alert sent successfully.');
-        } catch (error) {
-            console.error('❌ Failed to send email alert:', error);
-        }
-    }
+async function sendDiscord(items: MailItem[], full: boolean) {
+	const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
+	try {
+		await new Promise<void>((resolve, reject) => {
+			client.once('ready', async () => {
+				try {
+					const channel = (await client.channels.fetch(CHANNEL_ID)) as GuildTextBasedChannel | null;
+					if (!channel) { console.error('ไม่พบช่องใน Discord เพื่อส่งแจ้งเตือน'); resolve(); return; }
+					await channel.send({ components: buildComponents(items, full), flags: MessageFlags.IsComponentsV2 });
+					resolve();
+				} catch (e) { reject(e); }
+			});
+			client.login(process.env.BOT_TOKEN).catch(reject);
+		});
+	} finally {
+		client.destroy();
+	}
+}
 
-	if (to_discord) {
-        try {
-            const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
-            client.once('ready', async () => {
-                const channel = client.channels.cache.get('1399765608106688745') as GuildTextBasedChannel;
-                if(!channel) return;
+export async function send(to_discord: boolean = true, to_mail: boolean = true, full: boolean = true, data?: StatusData[]) {
+	let list: StatusData[];
+	if (full) {
+		list = [
+			data?.find(v => v.name == 'bot') || await bot_main(),
+			data?.find(v => v.name == 'database') || await database(),
+			data?.find(v => v.name == 'frontend_main') || await frontend_main(),
+			data?.find(v => v.name == 'backend') || await backend(),
+		];
+	} else {
+		list = data ?? [];
+	}
+	if (!list.length) return;
 
-                const isAnyDown = statusData.some(i => i.status === 0);
-                const titleCom = [
-                    (new TextDisplayBuilder().setContent(`${isAnyDown ? '<@&1227999302278713407>\n# ⚠️ Yumi Status Alert' : '# 🟢 Yumi Status Update'}`)),
-                    (new TextDisplayBuilder().setContent(`<t:${Math.floor(Date.now() / 1000)}:f>`)),
-                ];
-
-                const buildContainer = (v: LocalStatusData) => {
-                    const isUp = v.status == 1;
-                    
-                    let timeStats = '';
-                    if (isUp) {
-                        timeStats = `${!v.computedUptime ? '-#' : ''} - **Uptime**: ${v.computedUptime ? `${formatDuration(v.computedUptime * 1000, 'th', 'short')}` : 'N/A'}\n`;
-                        if (v.lastDowntimeDuration) timeStats += ` - **Last Downtime**: ${formatDuration(v.lastDowntimeDuration * 1000, 'th', 'short')}\n`;
-                    } else {
-                        timeStats = `${!v.computedDowntime ? '-#' : ''} - **Downtime**: ${v.computedDowntime ? `${formatDuration(v.computedDowntime * 1000, 'th', 'short')}` : 'N/A'}\n`;
-                        if (v.lastUptimeDuration) timeStats += ` - **Last Uptime**: ${formatDuration(v.lastUptimeDuration * 1000, 'th', 'short')}\n`;
-                    }
-
-                    return (new ContainerBuilder()
-                        .setAccentColor(isUp ? 0x10b981 : 0xef4444)
-                        .addTextDisplayComponents(t=>t.setContent(`## ${getName(v.name)} Status`))
-                        .addTextDisplayComponents(t=>t.setContent(` - **${isUp ? ':green_circle: Online' : ':red_circle: Offline'}** ${v.statusCode ? `(Code: ${v.statusCode})` : ''}
-${!v.ping ? '-#' : ''} - **Ping**: ${typeof v.ping === 'number' ? `${v.ping} ms` : 'N/A'}
-${timeStats}${full && v.resources?.cpu ? `- **CPU usage**: ${v.resources.cpu.percent}%\n- **Memory**: ${formatDataSize('byte', v.resources.memory.used, 'short')} / ${formatDataSize('byte', v.resources.memory.total, 'short')}` : ''}
-                        `))
-                    );
-                };
-
-                const components = [...titleCom, ...statusData.map(v => buildContainer(v))];
-                
-                await channel.send({ components, flags: MessageFlags.IsComponentsV2 });
-                client.destroy();
-            });
-            await client.login(process.env.BOT_TOKEN);
-        } catch(error) {
-            console.error('ไม่สามารถส่งข้อความไปที่ Discord ได้:', error);
-        }
-    }
+	const items: MailItem[] = list.map(s => ({ s, b: getBrief(s) }));
+	const tasks: Promise<unknown>[] = [];
+	if (to_discord) tasks.push(sendDiscord(items, full).catch(e => console.error('ไม่สามารถส่งข้อความไปที่ Discord ได้:', e)));
+	if (to_mail) tasks.push(sendStatusMail(items, full ? 'daily' : 'change').catch(e => console.error('ไม่สามารถส่งอีเมลได้:', e)));
+	await Promise.all(tasks);
 };

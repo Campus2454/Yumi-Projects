@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
-import { recordStatus, getReport } from './history.js';
+import { recordStatus, getReport, getBrief, parseRange } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
 import chalk from 'chalk';
 import { StatusData } from 'global/types';
@@ -19,7 +19,7 @@ async function checkAll() {
 	try{
 		allS = await _checkAll(false);
 
-		// บันทึก timeline (ถ้าบันทึกไม่ได้ ต้องไม่กระทบการเฝ้าดู)
+		// บันทึก timeline (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
 		try{ recordStatus(allS); }catch(e){ console.error('บันทึกประวัติสถานะไม่สำเร็จ:', e); }
 
 		changedStatus = allS.filter(current => {
@@ -29,7 +29,7 @@ async function checkAll() {
 		console.log(changedStatus);
 
 		if(changedStatus.length > 0){
-			await send(true, undefined, false, changedStatus);
+			await send(true, true, false, changedStatus);
 		};
 
 		if(allS.some(s => s.status === 0))throw new Error('Some service down');
@@ -61,23 +61,28 @@ app.use((req, res, next) => {
 	next();
 });
 
-// JSON สำหรับเอาไปใช้ต่อ (รวมข้อมูล downtime)
+// JSON สำหรับเอาไปใช้ต่อ: /api/status?range=24h|7d|30d|all
 app.get('/api/status', (req, res) => {
+	const range = parseRange(req.query.range);
 	const limits = getRateLimits();
 	res.json(allS.map(s => {
-		const r = getReport(s.name);
-		return { ...s, rateLimitedUntil: limits[s.name] ?? null, downtime: { current: r.current, windows: r.windows, incidents: r.incidents } };
+		const r = getReport(s.name, range);
+		return { ...s, rateLimitedUntil: limits[s.name] ?? null, brief: getBrief(s), range, stat: r.stat, incidents: r.incidents };
 	}));
 });
 
 app.get('/', (req, res) => {
-	res.send(renderIndex(allS.map(s => ({ s, r: getReport(s.name) })), getRateLimits()));
+	const range = parseRange(req.query.range);
+	res.send(renderIndex(allS.map(s => ({ s, r: getReport(s.name, range), b: getBrief(s) })), getRateLimits(), range));
 });
 
 app.get(`/:name`, (req, res) => {
+	const range = parseRange(req.query.range);
 	const status = allS.find(s => s.name === req.params.name);
 	if (!status) { res.status(404).send(renderNotFound(req.params.name)); return; }
-	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, getReport(status.name), getRateLimits()[status.name] ?? 0));
+	res.status(status.status === 1 ? 200 : 503).send(
+		renderDetail(status, getReport(status.name, range), getBrief(status), getRateLimits()[status.name] ?? 0, range)
+	);
 });
 
 try {
