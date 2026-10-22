@@ -4,6 +4,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { BackgroundFixed } from "../utils/styles";
 import { useEffect, useState } from 'react';
 import Link from "next/link";
+import Cookies from "js-cookie";
 
 export default function RedirectWrapperPage() {
     const searchParams = useSearchParams();
@@ -52,6 +53,15 @@ export default function RedirectWrapperPage() {
             return;
         }else if(path == 'contact' || pathname == '/contact'){
             window.location.href = '/contact';
+            return;
+        }else if(path == 'login_fallback' || pathname == '/login_fallback'){
+            const cookie = Cookies.get('discord_login_redirect');
+            let path = '/dashboard';
+            if (cookie) {
+                Cookies.remove('discord_login_redirect');
+                path = cookie;
+            };
+            window.location.href = path;
             return;
         };
 
