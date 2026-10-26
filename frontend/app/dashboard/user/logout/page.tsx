@@ -4,8 +4,11 @@ import { ErrorPopupContext } from "@/src/utils/contexts/Contexts";
 import { postAuthLogout, postAuthLogoutLocalhost } from "@/src/utils/api";
 import { Spinner_ring } from "@/src/components/Spinner";
 import { PageHeader } from "@/src/components/DashSections";
+import styled from "styled-components";
+import { UserContext } from "@/src/utils/contexts/Contexts";
 
 export default function UserLogoutPage() {
+    const { user } = useContext(UserContext);
     const { updateErrorPopup: setErrorPopup } = useContext(ErrorPopupContext);
     const [logging_out, setLogging_out] = useState(false);
     const hostname = process.env.NEXT_PUBLIC_HOSTNAME;
@@ -28,34 +31,34 @@ export default function UserLogoutPage() {
         }
     };
 
+
+    const LogoutB = styled.button`
+        padding: 10px 20px;
+        border: #e02424 2px solid;
+        border-radius: 5px;
+        background-color: #e34545;
+        color: ${props => props.disabled ? '#e34545' : '#fff'};
+        cursor: ${props => props.disabled ? 'progress' : 'pointer'};
+        font-weight: bold;
+        font-size: 20px;
+        position: relative;
+    `;
+
     return (
         <div>
             <PageHeader title="Logout" />
 
-            <div style={{ fontSize: 20, marginBottom: 15 }}>Do you want to log out?</div>
-            <button
-                onClick={logout}
-                disabled={logging_out}
-                style={{
-                    padding: '10px 20px',
-                    border: '#e02424 2px solid',
-                    borderRadius: 5,
-                    backgroundColor: '#e34545',
-                    color: logging_out ? '#e34545' : '#fff',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    fontSize: 20,
-                    position: 'relative',
-                }}
-            >
-                Logout
-                {logging_out ? (
-                    <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Spinner_ring size={45} border={5} color="#fff" />
-                    </div>
-                ) : null}
-            </button>
-            <div style={{ marginTop: 50 }}>Note: If you have any problems logging out, please contact the developer.</div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <div style={{ fontSize: 20, marginBottom: 15 }}>Do you want to log out?</div>
+                <LogoutB onClick={logout} disabled={!user || logging_out}>
+                    Logout
+                    {!user || logging_out ? (
+                        <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <Spinner_ring size={45} border={5} color="#fff" />
+                        </div>
+                    ) : null}
+                </LogoutB>
+            </div>
         </div>
     );
 }
