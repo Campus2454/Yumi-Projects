@@ -36,6 +36,8 @@ const same = (a: string, b: string) => crypto.timingSafeEqual(sha(a), sha(b));
 const rnd = () => crypto.randomBytes(32).toString('base64url');
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+/** แสดงอีเมลโดยเข้ารหัส @ และ . เพื่อไม่ให้ Cloudflare แทนที่เป็น [email protected] */
+const eml = (s: string) => esc(s).replace(/@/g, '&#64;').replace(/\./g, '&#46;');
 const form = express.urlencoded({ extended: false, limit: '16kb' });
 const ipOf = (req: any) => String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown').split(',')[0].trim();
 
@@ -146,7 +148,19 @@ a{color:inherit;text-decoration:none}
 .stat .v{font-size:2rem;font-weight:700;line-height:1.25;font-variant-numeric:tabular-nums}
 .stat .v small{font-size:.9rem;color:var(--dim);font-weight:300}
 .stat.ok .v{color:var(--ok)}.stat.down .v{color:var(--down)}.stat.load .v{color:var(--load)}.stat.warn .v{color:var(--warn)}
-.grid2{display:grid;grid-template-columns:1.1fr .9fr;gap:18px;align-items:start}
+.grid2{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr);gap:18px;align-items:start}
+.grid2>*{min-width:0}
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:14px}
+.svc{padding:18px;display:flex;flex-direction:column;gap:10px;border-radius:18px;border:1px solid rgba(255,255,255,.08);border-left:3px solid var(--dim);background:rgba(0,0,0,.22)}
+.svc.ok{border-left-color:var(--ok)}.svc.down{border-left-color:var(--down)}.svc.load{border-left-color:var(--load)}
+.svc header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.svc header b{font-weight:600}
+.svc form{display:flex;flex-direction:column;gap:8px;margin:0}
+.svc input{width:100%}
+.errline{margin:0;color:#ff9ea1;font-size:.85rem;word-break:break-word}
+.mnote{display:flex;gap:8px;align-items:flex-start;color:var(--load);font-size:.88rem}
+.mnote .ic{margin-top:3px}
+.wide{width:100%;justify-content:center}
 .tw{overflow-x:auto;border-radius:14px;border:1px solid rgba(255,255,255,.07);background:rgba(0,0,0,.18)}
 table{width:100%;border-collapse:collapse;min-width:560px}
 th,td{padding:12px 14px;text-align:left;border-bottom:1px solid rgba(255,255,255,.06);vertical-align:middle;font-size:.9rem;white-space:nowrap}
@@ -204,7 +218,7 @@ button:disabled{opacity:.4;cursor:not-allowed;filter:none}
 .login h1{margin:16px 0 4px;font-size:1.5rem;font-weight:700}
 .err{color:#ff9ea1}
 .foot{text-align:center;color:var(--dim);font-size:.8rem;margin-top:24px}
-@media (max-width:900px){.grid2{grid-template-columns:1fr}}
+@media (max-width:900px){.grid2{grid-template-columns:minmax(0,1fr)}}
 @media (max-width:640px){.top{position:static}.nav{width:100%}.search input{width:100%}.search{width:100%}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 `;
@@ -297,36 +311,35 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 		</form>
 	</section>`;
 
-	const services = statuses.length
+	const svcCards = statuses.length
 		? statuses.map(st => {
 			const m = maint[st.name];
 			const cls = st.status === 1 ? 'ok' : st.status === -1 ? 'load' : 'down';
 			const label = st.status === 1 ? 'ทำงานปกติ' : st.status === -1 ? 'กำลังเริ่มระบบ' : 'หยุดทำงาน';
 			const err = st.status === 0 ? getActiveError(st.name) : null;
 			const control = m !== undefined
-				? `<form method="post" action="/admin/maintenance" class="row" style="flex-wrap:nowrap">${hidden}
-					<input type="hidden" name="service" value="${esc(st.name)}"><input type="hidden" name="enable" value="off">
-					<span class="muted" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px">${esc(m)}</span>
-					<button class="ghost" type="submit">${ic('back')} เลิกปรับปรุง</button></form>`
-				: `<form method="post" action="/admin/maintenance" class="row" style="flex-wrap:nowrap">${hidden}
-					<input type="hidden" name="service" value="${esc(st.name)}"><input type="hidden" name="enable" value="on">
-					<input name="message" maxlength="200" placeholder="เช่น อัปเดตเซิร์ฟเวอร์ ~30 นาที" style="min-width:200px">
-					<button class="ghost" type="submit">${ic('pencil')} เปิดปรับปรุง</button></form>`;
-			return `<tr>
-				<td><b>${esc(displayName(st.name))}</b><div class="muted">${esc(st.name)}</div></td>
-				<td><span class="pill ${cls}">${label}</span>${m !== undefined ? ' <span class="pill maint">ปรับปรุง</span>' : ''}</td>
-				<td class="clip muted">${err ? esc(err.message) : '—'}</td>
-				<td>${control}</td></tr>`;
+				? `<div class="mnote">${ic('pencil')}<span>${esc(m)}</span></div>
+					<form method="post" action="/admin/maintenance">${hidden}
+						<input type="hidden" name="service" value="${esc(st.name)}"><input type="hidden" name="enable" value="off">
+						<button class="ghost wide" type="submit">${ic('back')} เลิกโหมดปรับปรุง</button></form>`
+				: `<form method="post" action="/admin/maintenance">${hidden}
+						<input type="hidden" name="service" value="${esc(st.name)}"><input type="hidden" name="enable" value="on">
+						<input name="message" maxlength="200" placeholder="ข้อความที่จะแสดง เช่น อัปเดตเซิร์ฟเวอร์ ~30 นาที">
+						<button class="ghost wide" type="submit">${ic('pencil')} เปิดโหมดปรับปรุง</button></form>`;
+			return `<article class="svc ${cls}">
+				<header><div><b>${esc(displayName(st.name))}</b><div class="muted">${esc(st.name)}</div></div>
+				<span class="pill ${cls}">${label}</span></header>
+				${err ? `<p class="errline">${esc(err.message)}</p>` : ''}
+				${m !== undefined ? '<span class="pill maint" style="align-self:flex-start">กำลังปรับปรุง</span>' : ''}
+				${control}
+			</article>`;
 		}).join('')
-		: `<tr><td colspan="4" class="muted">กำลังตรวจสอบบริการ…</td></tr>`;
+		: `<p class="muted">กำลังตรวจสอบบริการ…</p>`;
 
 	const servicesCard = `
 	<section class="glass card" id="services">
-		<div class="head"><div><h2>บริการ และโหมดปรับปรุง</h2><p class="sub">โหมดปรับปรุงจะแสดงป้ายบนหน้าเว็บ และหยุดส่งการแจ้งเตือนของบริการนั้น</p></div></div>
-		<div class="tw"><table>
-			<thead><tr><th>บริการ</th><th>สถานะ</th><th>สาเหตุล่าสุด</th><th>โหมดปรับปรุง</th></tr></thead>
-			<tbody>${services}</tbody>
-		</table></div>
+		<div class="head"><div><h2>บริการ และโหมดปรับปรุง</h2><p class="sub">โหมดปรับปรุงจะแสดงป้ายบนหน้าเว็บ และหยุดการแจ้งเตือนของบริการนั้นชั่วคราว</p></div></div>
+		<div class="svc-grid">${svcCards}</div>
 	</section>`;
 
 	const incRows = downs.length
@@ -355,7 +368,7 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 	const shown = needle ? subs.filter(u => u.email.toLowerCase().includes(needle)) : subs;
 	const subRows = shown.length
 		? shown.map(u => `<tr>
-			<td class="clip" style="max-width:280px">${esc(u.email)}</td>
+			<td class="clip" style="max-width:280px">${eml(u.email)}</td>
 			<td><span class="pill ${u.status === 'active' ? 'ok' : u.status === 'pending' ? 'load' : 'mute'}">${esc(STATUS_TH[u.status] ?? u.status)}</span></td>
 			<td class="muted">${fmtDateTh(Number(u.created_at))}</td>
 			<td><div class="acts">
@@ -413,9 +426,10 @@ async function dashboard(csrf: string, ok: string, q: string, statuses: StatusDa
 		${flashHtml(ok)}
 		${stats}
 		<div class="grid2">
-			<div>${bannerCard}${servicesCard}${incidentsCard}</div>
+			<div>${bannerCard}${incidentsCard}</div>
 			<div>${tools}${subsCard}${activityCard}</div>
 		</div>
+		${servicesCard}
 	</main>`);
 }
 

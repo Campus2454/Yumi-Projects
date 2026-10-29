@@ -187,7 +187,7 @@ const shell = (title: string, left: string, main: string, state: string, embed =
 <div class="wrap">
 <header class="top">
 	<div class="l">${left}</div>
-	<div class="r"><span class="upd" id="updated">สด</span><button class="btn" id="reload" aria-label="รีเฟรช">${ICON.refresh}</button></div>
+	<div class="r"><a class="btn" href="/?subscribe=1" data-sub-open title="รับการแจ้งเตือนทางอีเมล" aria-label="รับการแจ้งเตือนทางอีเมล"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 6 2 7 2 7H4s2-1 2-7M10 19a2 2 0 0 0 4 0"/></svg></a><span class="upd" id="updated">สด</span><button class="btn" id="reload" aria-label="รีเฟรช">${ICON.refresh}</button></div>
 </header>
 <main id="app" data-state="${state}" data-now="${Date.now()}">
 ${main}
@@ -276,7 +276,7 @@ ${n ? `<section class="list glass">${rows}</section>` : ''}
 	<span><i style="background:var(--down)"></i>ล่มนานกว่านั้น</span>
 	<span><i style="background:rgba(255,255,255,.12)"></i>ไม่มีข้อมูล</span>
 </div>
-${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กราฟ CPU / RAM / Ping</a><button type="button" class="linkbtn" data-sub-open>รับการแจ้งเตือนทางอีเมล</button></nav>`}`;
+${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กราฟ CPU / RAM / Ping</a><a class="linkbtn" href="/?subscribe=1" data-sub-open>รับการแจ้งเตือนทางอีเมล</a></nav>`}`;
 	return shell('Yumi - สถานะระบบ', embed ? '' : brand, main, overall.key, embed);
 }
 

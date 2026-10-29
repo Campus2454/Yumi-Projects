@@ -46,44 +46,50 @@ export const SUB_MODAL = `
 
 /** ตัวจัดการโมดัล: เปิดจากปุ่ม [data-sub-open], ปิดด้วย X / คลิกนอกกล่อง / Esc, ส่งอีเมลผ่าน /api/subscribe */
 export const SUB_JS = `(function(){
-var m=document.getElementById('subm'),f=document.getElementById('subf'),em=document.getElementById('subem'),go=document.getElementById('subgo'),msg=document.getElementById('submsg');
+var m=document.getElementById('subm');
 if(!m)return;
+var f=document.getElementById('subf'),em=document.getElementById('subem'),go=document.getElementById('subgo'),msg=document.getElementById('submsg');
 var lastFocus=null;
-function say(t,c){msg.textContent=t;msg.className='msg '+(c||'');}
+function say(t,c){if(msg){msg.textContent=t;msg.className='msg '+(c||'');}}
 function open(){
 	lastFocus=document.activeElement;
 	m.classList.add('open');m.setAttribute('aria-hidden','false');
-	setTimeout(function(){em.focus();},50);
+	if(em)setTimeout(function(){em.focus();},50);
 }
 function close(){
 	m.classList.remove('open');m.setAttribute('aria-hidden','true');
-	var u=new URL(location.href);
-	if(u.searchParams.has('subscribe')){u.searchParams.delete('subscribe');history.replaceState(null,'',u.pathname+u.search+u.hash);}
+	try{
+		var u=new URL(location.href);
+		if(u.searchParams.has('subscribe')){u.searchParams.delete('subscribe');history.replaceState(null,'',u.pathname+u.search+u.hash);}
+	}catch(err){}
 	if(lastFocus&&lastFocus.focus)lastFocus.focus();
 }
 document.addEventListener('click',function(e){
 	var t=e.target;
 	if(!t||!t.closest)return;
-	if(t.closest('[data-sub-open]')){e.preventDefault();open();return;}
+	var o=t.closest('[data-sub-open]');
+	if(o){e.preventDefault();open();return;}
 	if(t===m||t.closest('[data-sub-close]'))close();
-});
+},false);
 document.addEventListener('keydown',function(e){
 	if(e.key==='Escape'&&m.classList.contains('open'))close();
 });
-f.addEventListener('submit',function(e){
-	e.preventDefault();
-	var v=(em.value||'').trim();
-	if(!v){say('กรุณาใส่อีเมล','err');return;}
-	go.disabled=true;say('กำลังส่ง…');
-	fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
-	.then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
-	.then(function(x){
-		if(x.s===429)say('ขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่','warn');
-		else if(x.j.ok){say('ส่งลิงก์ยืนยันไปที่อีเมลของคุณแล้ว กรุณาเช็ค inbox หรือ spam','ok');f.reset();}
-		else say(x.j.error||'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง','err');
-	})
-	.catch(function(){say('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง','err');})
-	.finally(function(){go.disabled=false;});
-});
+if(f){
+	f.addEventListener('submit',function(e){
+		e.preventDefault();
+		var v=((em&&em.value)||'').trim();
+		if(!v){say('กรุณาใส่อีเมล','err');return;}
+		if(go)go.disabled=true;say('กำลังส่ง…');
+		fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
+		.then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+		.then(function(x){
+			if(x.s===429)say('ขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่','warn');
+			else if(x.j.ok){say('ส่งลิงก์ยืนยันไปที่อีเมลของคุณแล้ว กรุณาเช็ค inbox หรือ spam','ok');f.reset();}
+			else say(x.j.error||'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง','err');
+		})
+		.catch(function(){say('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง','err');})
+		.finally(function(){if(go)go.disabled=false;});
+	});
+}
 if(/[?&]subscribe=1/.test(location.search))open();
 })();`;
