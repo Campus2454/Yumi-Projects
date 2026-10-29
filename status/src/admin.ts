@@ -50,10 +50,20 @@ function sessionOf(req: any): { token: string; s: Session } | null {
 }
 
 /** คำขอต้องมาจากหน้าเดียวกัน (กัน CSRF เพิ่มจาก SameSite=Strict และ token) */
+/** โฮสต์สาธารณะของหน้าสถานะ (อยู่หลัง reverse proxy host ที่เซิร์ฟเวอร์เห็นอาจไม่ตรงกับโดเมนจริง) */
+const PUBLIC_HOST = (() => { try { return new URL(process.env.STATUS_PAGE_URL || '').host; } catch { return ''; } })();
+
 function sameOrigin(req: any): boolean {
+	// เบราว์เซอร์สมัยใหม่บอกมาตรง ๆ ว่าคำขอมาจากหน้าเดียวกัน
+	if (req.headers['sec-fetch-site'] === 'same-origin') return true;
 	const o = req.headers.origin;
-	if (!o) return true; // ถ้าเบราว์เซอร์ไม่ส่ง Origin ให้พึ่ง token ด้านล่าง
-	try { return new URL(String(o)).host === req.headers.host; } catch { return false; }
+	if (!o) return true; // ถ้าไม่มี Origin ให้พึ่ง CSRF token (กรณี POST ที่ต้องล็อกอินแล้ว)
+	let oh = '';
+	try { oh = new URL(String(o)).host; } catch { return false; }
+	const hosts = [req.headers.host, req.headers['x-forwarded-host'], PUBLIC_HOST]
+		.filter(Boolean)
+		.map(h => String(h).split(',')[0].trim());
+	return hosts.includes(oh);
 }
 
 /** ตรวจ session + CSRF สำหรับ POST ถ้าไม่ผ่านให้ส่งกลับหน้าแอดมิน */

@@ -253,9 +253,26 @@ export interface SeriesPoint {
 const r1 = (v: number | null | undefined) => (v == null ? null : Math.round(v * 10) / 10);
 
 /** คืน SERIES_POINTS + 1 จุดเสมอ ช่วงที่ไม่มีข้อมูลเป็น null (กราฟจะขาดตรงนั้น) */
-export async function getSeries(service: string, range: Range = '24h', now = Date.now()): Promise<SeriesPoint[]> {
+/** เวลาของตัวอย่างแรกสุดที่เคยบันทึกของ service นี้ (null ถ้ายังไม่มีข้อมูล) */
+export async function firstSampleTs(service: string): Promise<number | null> {
 	await initHistory();
-	const span = range === 'all' ? SAMPLE_KEEP_MS : RANGE_MS[range as '24h' | '7d' | '30d'];
+	const r = (await pool.query<{ t: string | null }>(`SELECT MIN(ts) AS t FROM samples WHERE service = $1`, [service])).rows[0];
+	return r?.t == null ? null : Number(r.t);
+}
+
+/**
+ * startOverride: เวลาเริ่มของช่วง "ทั้งหมด" (ใช้ร่วมกันทุก service ในหน้ากราฟ)
+ * ถ้าไม่ระบุ จะเริ่มจากตัวอย่างแรกของ service นั้นเอง
+ */
+export async function getSeries(service: string, range: Range = '24h', now = Date.now(), startOverride?: number): Promise<SeriesPoint[]> {
+	await initHistory();
+	let span: number;
+	if (range === 'all') {
+		const first = startOverride ?? (await firstSampleTs(service)) ?? now;
+		span = Math.max(now - first, HOUR);
+	} else {
+		span = RANGE_MS[range as '24h' | '7d' | '30d'];
+	}
 	const from = now - span;
 	const size = Math.max(span / SERIES_POINTS, 1000);
 

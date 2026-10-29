@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
-import { recordStatus, getReport, getBrief, getSeries, getBanner, getMaintenance, parseRange, initHistory } from './history.js';
+import { recordStatus, getReport, getBrief, getSeries, firstSampleTs, getBanner, getMaintenance, parseRange, initHistory } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
 import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSubscribers } from './subscribers.js';
 import { renderSubscribePage, renderConfirmResult, renderUnsubResult } from './subscribe-page.js';
@@ -113,7 +113,10 @@ app.get('/api/metrics', wrap(async (req, res) => {
 // หน้ากราฟ CPU / RAM / Ping: /metrics?range=24h|7d|30d|all
 app.get('/metrics', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
-	const entries = await Promise.all(METRIC_SERVICES.map(async n => [n, await getSeries(n, range)] as const));
+	// ทั้งหมด: ทุกกราฟเริ่มที่ตัวอย่างแรกสุดของทุก service (ไม่เว้นว่างทางซ้าย)
+	const firsts = (await Promise.all(METRIC_SERVICES.map(firstSampleTs))).filter((x): x is number => x !== null);
+	const start = firsts.length ? Math.min(...firsts) : undefined;
+	const entries = await Promise.all(METRIC_SERVICES.map(async n => [n, await getSeries(n, range, Date.now(), start)] as const));
 	res.send(renderMetricsPage(Object.fromEntries(entries), range));
 }));
 

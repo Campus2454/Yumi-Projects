@@ -83,7 +83,12 @@ export function svgChart(lines: Line[], unit: string): string {
 		lines: live.map(l => ({ name: l.name, color: l.color, v: l.points.map(p => p.v) })),
 	};
 
-	const legend = live.map(l => `<span style="color:${l.color}">● ${esc(l.name)}</span>`).join(' &nbsp; ');
+	const f1 = (v: number) => String(Math.round(v * 10) / 10);
+	const legend = live.map(l => {
+		const vs = l.points.map(p => p.v).filter((v): v is number => v !== null);
+		const mn = Math.min(...vs), mx = Math.max(...vs), av = vs.reduce((a, b) => a + b, 0) / vs.length;
+		return `<span class="lg" style="color:${l.color}">● ${esc(l.name)} <em>ต่ำสุด</em> <b>${f1(mn)}${esc(unit)}</b> <em>เฉลี่ย</em> <b>${f1(av)}${esc(unit)}</b> <em>สูงสุด</em> <b>${f1(mx)}${esc(unit)}</b></span>`;
+	}).join('');
 
 	return `<div class="ch" data-chart="${esc(JSON.stringify(data))}">` +
 		`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">${grid.join('')}${paths}` +
@@ -100,6 +105,9 @@ export const UI_CSS = `
 .ch svg{display:block;width:100%;height:auto;overflow:visible}
 .ch .g{stroke:rgba(255,255,255,.07)}
 .ch .ax{font-size:11px;fill:#8a706d;font-variant-numeric:tabular-nums;font-family:'Kanit',system-ui,sans-serif}
+.ch .legend{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:8px;font-size:12.5px;color:#b99a97}
+.ch .legend em{font-style:normal;color:#8a706d;margin-left:4px}
+.ch .legend b{color:#fff3f1;font-weight:500;margin-left:2px}
 .ch .cur{stroke:rgba(255,255,255,.35);stroke-dasharray:3 3;display:none}
 .ch circle.pt{display:none;stroke:#0b0405;stroke-width:2}
 .ch .hit{fill:transparent;cursor:crosshair}

@@ -363,7 +363,7 @@ ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}<
 <section class="panel glass"><h2>ไทม์ไลน์สถานะ</h2>
 	<div class="strip">${strip}</div>
 	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>ตอนนี้</span></div></section>
-<section class="panel glass spark"><h2>เวลาตอบสนอง</h2>${spark}</section>
+<section class="panel glass"><h2>เวลาตอบสนอง (Ping)</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
 ${resourcePanels(series)}
 <section class="panel glass"><h2>ประวัติ downtime</h2>${incidents}</section>`;
 
