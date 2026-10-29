@@ -2,6 +2,7 @@ import pg from 'pg';
 import crypto from 'node:crypto';
 import { sendRaw } from './mail.js';
 import { initHistory } from './history.js';
+import { FONT, mailButton, mailDoc, mailHeader, nowTh } from './mail-theme.js';
 
 /**
  * ระบบผู้รับอีเมลแบบ double opt-in
@@ -117,16 +118,19 @@ export async function countActive(): Promise<number> {
 	return Number((await pool.query<{ n: string }>(`SELECT COUNT(*) AS n FROM subscribers WHERE status = 'active'`)).rows[0].n);
 }
 
-const confirmHtml = (link: string) => `<!doctype html><html lang="th"><body style="margin:0;background:#0b0405;font-family:'Kanit',Tahoma,Arial,sans-serif;color:#fff3f1;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:28px 12px;">
-<table role="presentation" width="560" style="max-width:560px;width:100%;background:#1a0b0d;border:1px solid #f13b3b;border-radius:20px;">
-<tr><td style="padding:30px 28px;">
-<div style="font-size:13px;color:#ff9ea1;">Yumi Status</div>
-<div style="margin-top:6px;font-size:24px;font-weight:700;">ยืนยันการรับแจ้งเตือน</div>
-<p style="font-size:15px;font-weight:300;color:#d8b9b5;line-height:1.7;">มีผู้ใส่อีเมลนี้เพื่อรับการแจ้งเตือนสถานะระบบ Yumi กดปุ่มด้านล่างเพื่อยืนยัน ลิงก์ใช้ได้ 48 ชั่วโมง</p>
-<p style="margin:24px 0;text-align:center;"><a href="${link}" style="display:inline-block;padding:14px 34px;border-radius:14px;background:#f13b3b;color:#fff;text-decoration:none;font-weight:600;">ยืนยันอีเมลนี้</a></p>
-<p style="font-size:12px;color:#8a706d;line-height:1.7;">หากไม่ได้สมัคร ไม่ต้องทำอะไร อีเมลจะไม่ถูกเพิ่มเข้ารายการ</p>
-</td></tr></table></td></tr></table></body></html>`;
+const confirmHtml = (link: string) => mailDoc('ยืนยันการรับแจ้งเตือน Yumi Status', `
+${mailHeader(nowTh())}
+<tr><td style="padding:0 0 18px 0">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="card" style="background:#ffffff;border:1px solid #e7e0e1;border-radius:20px">
+<tr><td style="padding:28px 26px;font-family:${FONT}">
+	<div class="t-load" style="font-size:13px;color:#0b6e99">ยืนยันอีเมล</div>
+	<div class="ink" style="margin-top:6px;font-size:24px;font-weight:700;line-height:1.3;color:#1d1719">ยืนยันการรับแจ้งเตือนสถานะระบบ</div>
+	<div class="mut" style="margin-top:10px;font-size:15px;font-weight:300;line-height:1.7;color:#5f5355">มีผู้ใส่อีเมลนี้เพื่อรับการแจ้งเตือนสถานะระบบ Yumi กดปุ่มด้านล่างเพื่อยืนยัน ลิงก์ใช้ได้ 48 ชั่วโมง</div>
+	<div style="margin:24px 0 6px 0;text-align:center">${mailButton(link, 'ยืนยันอีเมลนี้')}</div>
+	<div class="dim" style="margin-top:14px;font-size:12px;line-height:1.7;color:#7d7072">หากปุ่มไม่ทำงาน คัดลอกลิงก์นี้ไปเปิดในเบราว์เซอร์: <span style="word-break:break-all">${link}</span></div>
+	<div class="dim" style="margin-top:12px;font-size:12px;line-height:1.7;color:#7d7072">หากไม่ได้สมัคร ไม่ต้องทำอะไร อีเมลจะไม่ถูกเพิ่มเข้ารายการ</div>
+</td></tr></table>
+</td></tr>`, 'กดยืนยันเพื่อรับการแจ้งเตือนสถานะ Yumi');
 
 const confirmText = (link: string) =>
 	`ยืนยันการรับแจ้งเตือน Yumi Status\n\nกดลิงก์นี้เพื่อยืนยัน (ใช้ได้ 48 ชั่วโมง):\n${link}\n\nหากไม่ได้สมัคร ไม่ต้องทำอะไร`;
