@@ -2,25 +2,44 @@ import type { SeriesPoint, Range } from './history.js';
 import { RANGE_LIST } from './history.js';
 import { displayName, fmtDateTh } from './format.js';
 
-const W = 720, H = 200, PL = 46, PR = 12, PT = 12, PB = 26;
-const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24'];
+const W = 720, H = 200, PL = 56, PR = 12, PT = 12, PB = 26;
+export const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24'];
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
-type Line = { name: string; color: string; points: { ts: number; v: number | null }[] };
+export type Line = { name: string; color: string; points: { ts: number; v: number | null }[] };
+export type SeriesKey = 'cpu' | 'memMb' | 'ping';
 
-/** วาดกราฟเส้นเป็น SVG; ช่วงที่ v เป็น null จะขาดเส้น */
-function svgChart(lines: Line[], yMax: number, unit: string): string {
-	const pts = lines.flatMap(l => l.points);
-	if (!pts.some(p => p.v !== null)) return `<p class="empty">ยังไม่มีข้อมูลในช่วงนี้</p>`;
+/** แปลงข้อมูลช่วงเวลาเป็นเส้นหนึ่งเส้น */
+export function seriesLine(points: SeriesPoint[], key: SeriesKey, name: string, color: string): Line {
+	return { name, color, points: points.map(p => ({ ts: p.ts, v: p[key] })) };
+}
 
-	const t0 = Math.min(...pts.map(p => p.ts)), t1 = Math.max(...pts.map(p => p.ts));
+/**
+ * ขอบบนของแกน Y จากค่าสูงสุดที่มองเห็นจริงในกราฟ (เพิ่มขึ้น 5% แล้วปัดขึ้นเป็นตัวเลขที่อ่านง่าย)
+ * เช่น ค่าสูงสุด 500 -> 530, ค่าสูงสุด 37 -> 39
+ */
+export function yLimit(max: number): number {
+	if (!(max > 0)) return 1;
+	const unit = Math.pow(10, Math.floor(Math.log10(max)) - 1);
+	return Number((Math.ceil((max * 1.05) / unit) * unit).toFixed(6));
+}
+
+/** วาดกราฟเส้นเป็น SVG; ช่วงที่ v เป็น null จะขาดเส้น; แกน Y อิงจากค่าสูงสุดในกราฟนี้เท่านั้น */
+export function svgChart(lines: Line[], unit: string): string {
+	const all = lines.flatMap(l => l.points);
+	const vals = all.filter(p => p.v !== null).map(p => p.v as number);
+	if (!vals.length) return `<p class="empty">ยังไม่มีข้อมูลในช่วงนี้</p>`;
+
+	const yMax = yLimit(Math.max(...vals));
+	const t0 = Math.min(...all.map(p => p.ts)), t1 = Math.max(...all.map(p => p.ts));
 	const X = (t: number) => PL + ((t - t0) / Math.max(1, t1 - t0)) * (W - PL - PR);
-	const Y = (v: number) => PT + (1 - Math.min(v, yMax) / yMax) * (H - PT - PB);
+	const Y = (v: number) => PT + (1 - v / yMax) * (H - PT - PB);
+	const fmt = (v: number) => (yMax < 10 ? v.toFixed(1) : String(Math.round(v)));
 
 	const grid = [0, 0.25, 0.5, 0.75, 1].map(f => {
 		const v = yMax * f, y = Y(v);
 		return `<line x1="${PL}" x2="${W - PR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="#331a1d"/>` +
-			`<text x="${PL - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#8a706d">${Math.round(v)}${unit}</text>`;
+			`<text x="${PL - 8}" y="${(y + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="#8a706d">${fmt(v)}${esc(unit)}</text>`;
 	}).join('');
 
 	const paths = lines.map(l => {
@@ -42,29 +61,20 @@ function svgChart(lines: Line[], yMax: number, unit: string): string {
 	return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img">${grid}${paths}${xLabels}</svg><div class="legend">${legend}</div>`;
 }
 
-const niceMax = (v: number) => Math.max(100, Math.ceil((v * 1.2) / 50) * 50);
-
 const panel = (title: string, body: string) => `<section class="panel"><h2>${esc(title)}</h2>${body}</section>`;
 
 /** หน้ากราฟ: /metrics?range=24h|7d|30d|all */
 export function renderMetricsPage(data: Record<string, SeriesPoint[]>, range: Range): string {
-	const pick = (name: string, key: 'cpu' | 'mem' | 'ping'): Line['points'] =>
-		(data[name] ?? []).map(p => ({ ts: p.ts, v: p[key] }));
+	const resourcePanels = ['bot', 'backend'].flatMap(name => [
+		panel(`${displayName(name)} · CPU (%)`, svgChart([seriesLine(data[name] ?? [], 'cpu', 'CPU', COLORS[0])], '%')),
+		panel(`${displayName(name)} · RAM (MB)`, svgChart([seriesLine(data[name] ?? [], 'memMb', 'RAM', COLORS[2])], ' MB')),
+	]);
 
-	const resourcePanel = (name: string) => panel(
-		`${displayName(name)}: CPU และหน่วยความจำ (%)`,
-		svgChart([
-			{ name: 'CPU', color: COLORS[0], points: pick(name, 'cpu') },
-			{ name: 'RAM', color: COLORS[2], points: pick(name, 'mem') },
-		], 100, '%'),
-	);
-
-	const pingMax = Math.max(0, ...Object.keys(data).flatMap(n => (data[n] ?? []).map(p => p.ping ?? 0)));
 	const pingPanel = panel(
 		'Ping (ms) ทุกบริการ',
 		svgChart(
-			Object.keys(data).map((n, i) => ({ name: displayName(n), color: COLORS[i % COLORS.length], points: pick(n, 'ping') })),
-			niceMax(pingMax), ' ms',
+			Object.keys(data).map((n, i) => seriesLine(data[n] ?? [], 'ping', displayName(n), COLORS[i % COLORS.length])),
+			' ms',
 		),
 	);
 
@@ -92,8 +102,7 @@ h1{margin:0 0 12px;font-size:1.6rem}
 <div class="grid">
 <h1>กราฟสถานะระบบ</h1>
 <nav class="tabs">${tabs}</nav>
-${resourcePanel('bot')}
-${resourcePanel('backend')}
+${resourcePanels.join('\n')}
 ${pingPanel}
 </div>
 </body></html>`;

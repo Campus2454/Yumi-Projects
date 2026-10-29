@@ -203,7 +203,7 @@ export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> 
 /* ------------------------------------------------------------------ */
 /*  Series: ข้อมูลสำหรับกราฟ (รวมเป็น SERIES_POINTS จุดในช่วงเวลา)        */
 /* ------------------------------------------------------------------ */
-export interface SeriesPoint { ts: number; cpu: number | null; mem: number | null; ping: number | null; status: number | null }
+export interface SeriesPoint { ts: number; cpu: number | null; memMb: number | null; ping: number | null; status: number | null }
 
 /** คืน SERIES_POINTS + 1 จุดเสมอ ช่วงที่ไม่มีข้อมูลเป็น null (กราฟจะขาดตรงนั้น) */
 export async function getSeries(service: string, range: Range = '24h', now = Date.now()): Promise<SeriesPoint[]> {
@@ -215,7 +215,7 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 	const rows = (await pool.query<{ k: number; cpu: number | null; mem: number | null; ping: number | null; st: number | null }>(
 		`SELECT FLOOR((ts - $2::bigint)::float8 / $3::float8)::int AS k,
 		        AVG(cpu)::float8 AS cpu,
-		        AVG(mem_percent)::float8 AS mem,
+		        AVG(mem_used)::float8 AS mem,
 		        AVG(ping)::float8 AS ping,
 		        MIN(status)::int AS st
 		 FROM samples
@@ -231,7 +231,7 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 		out.push({
 			ts: from + k * size + size / 2,
 			cpu: r?.cpu == null ? null : Math.round(r.cpu * 10) / 10,
-			mem: r?.mem == null ? null : Math.round(r.mem * 10) / 10,
+			memMb: r?.mem == null ? null : Math.round((r.mem / 1048576) * 10) / 10,
 			ping: r?.ping == null ? null : Math.round(r.ping),
 			status: r?.st ?? null,
 		});

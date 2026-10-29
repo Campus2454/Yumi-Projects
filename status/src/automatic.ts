@@ -155,8 +155,8 @@ app.get(`/:name`, wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const status = allS.find(s => s.name === req.params.name);
 	if (!status) { res.status(404).send(renderNotFound(req.params.name)); return; }
-	const [r, b] = await Promise.all([getReport(status.name, range), getBrief(status)]);
-	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range));
+	const [r, b, series] = await Promise.all([getReport(status.name, range), getBrief(status), getSeries(status.name, range)]);
+	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range, series));
 }));
 
 // เริ่มเฝ้าดูหลังเชื่อมต่อ DB สำเร็จ เพื่อไม่ให้บันทึกประวัติหาย

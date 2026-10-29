@@ -13,6 +13,49 @@ const mailText = {
 const httpsAgent = new https.Agent({ family: 4 });
 
 /* ------------------------------------------------------------------ */
+/*  ตั้งค่า                                                             */
+/* ------------------------------------------------------------------ */
+/** ต้องพังติดกันกี่รอบ ถึงจะถือว่า "หยุดทำงานจริง" (กันแจ้งเตือนจาก timeout ชั่วคราว) */
+const CONFIRM_FAILS = 3;
+/** เวลารอสูงสุดของแต่ละ service (Next.js บางครั้งโหลดนาน) */
+const SERVICE_TIMEOUT_MS = 10_000;
+const FRONTEND_TIMEOUT_MS = 20_000;
+
+/* ------------------------------------------------------------------ */
+/*  สาเหตุที่พัง (ใช้แสดงในการแจ้งเตือน Discord / อีเมล)                 */
+/* ------------------------------------------------------------------ */
+export type Failure = { message: string; at: number };
+/** error ของรอบที่กำลังพังอยู่ (ถูกลบเมื่อกลับมาทำงานได้) */
+const active = new Map<string, Failure>();
+/** error ล่าสุดที่เคยเกิดขึ้น (ไม่ถูกลบ) */
+const lastFail = new Map<string, Failure>();
+
+export function getActiveError(name: string): Failure | null { return active.get(name) ?? null; }
+export function getLastError(name: string): Failure | null { return lastFail.get(name) ?? null; }
+
+/** แปลง error จาก axios / mysql ให้เป็นข้อความที่อ่านรู้เรื่อง */
+function describeError(err: unknown): string {
+	if (axios.isAxiosError(err)) {
+		if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') return 'หมดเวลารอการตอบกลับ (timeout)';
+		if (err.response) return `เซิร์ฟเวอร์ตอบกลับด้วย HTTP ${err.response.status}`;
+		if (err.code) return `เชื่อมต่อไม่ได้ (${err.code})`;
+		return `เชื่อมต่อไม่ได้: ${err.message}`;
+	}
+	if (err instanceof Error) return err.message;
+	return String(err);
+}
+
+/** บันทึกว่าพังเพราะอะไร แล้วคืนสถานะ "หยุดทำงาน" */
+function failed(name: string, message: string, send2mail: boolean): StatusData {
+	const f: Failure = { message, at: Date.now() };
+	active.set(name, f);
+	lastFail.set(name, f);
+	console.error(`[${name}] ${message}`);
+	if (send2mail) sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, `${name}: ${message}`);
+	return { name, status: 0, ping: undefined, uptime: undefined, startTime: undefined, host: undefined, version: undefined, resources: undefined };
+}
+
+/* ------------------------------------------------------------------ */
 /*  429 protection                                                     */
 /*  ถ้าโดน 429 จะไม่ถือว่า offline: พักการเช็ค service นั้นตาม           */
 /*  Retry-After (หรือ backoff) แล้วใช้ผลล่าสุดที่รู้ไปก่อน จากนั้นลองใหม่ */
@@ -40,7 +83,7 @@ function asRateLimit(err: unknown): RateLimitError | null {
 	return null;
 }
 
-type Guard = { blockedUntil: number; strikes: number; checkedAt: number; last?: StatusData };
+type Guard = { blockedUntil: number; strikes: number; checkedAt: number; fails: number; last?: StatusData };
 const guards = new Map<string, Guard>();
 
 /** service ไหนกำลังพักเพราะ 429 อยู่ (ค่า = เวลาที่จะลองใหม่ เป็น epoch ms) */
@@ -53,7 +96,7 @@ export function getRateLimits(): Record<string, number> {
 
 async function guarded(key: string, fn: () => Promise<StatusData>, minIntervalMs = 0): Promise<StatusData> {
 	let g = guards.get(key);
-	if (!g) { g = { blockedUntil: 0, strikes: 0, checkedAt: 0 }; guards.set(key, g); }
+	if (!g) { g = { blockedUntil: 0, strikes: 0, checkedAt: 0, fails: 0 }; guards.set(key, g); }
 
 	const unknown: StatusData = { name: key, status: -1, ping: undefined, uptime: undefined, startTime: undefined, host: undefined, version: undefined, resources: undefined };
 	const now = Date.now();
@@ -64,6 +107,19 @@ async function guarded(key: string, fn: () => Promise<StatusData>, minIntervalMs
 		g.checkedAt = now;
 		const r = await fn();
 		g.strikes = 0;
+
+		if (r.status === 0) {
+			g.fails++;
+			// ยังไม่ถึงจำนวนที่ยืนยัน: คงสถานะเดิมไว้ ยังไม่เปลี่ยนเป็นหยุดทำงาน (ไม่แจ้งเตือน)
+			if (g.fails < CONFIRM_FAILS) {
+				console.warn(`[${key}] พังรอบที่ ${g.fails}/${CONFIRM_FAILS} ยังไม่ยืนยันว่าหยุดทำงาน`);
+				return g.last ?? unknown;
+			}
+		} else {
+			g.fails = 0;
+			active.delete(key);
+		}
+
 		g.last = r;
 		return r;
 	} catch (err) {
@@ -100,9 +156,9 @@ export function database(send2mail: boolean = true): Promise<StatusData> {
 
 async function _bot_main(send2mail: boolean): Promise<StatusData> {
 	try{
-		const res = await axios.get<StatusData>(`http://${process.env.LOCALHOST}:30061/`);
+		const res = await axios.get<StatusData>(`http://${process.env.LOCALHOST}:30061/`, { timeout: SERVICE_TIMEOUT_MS });
 		const loadData = res.data;
-		if(!loadData || !loadData.name || !loadData.status)throw `no data`;
+		if(!loadData || !loadData.name || !loadData.status) throw new Error('ข้อมูลที่ได้รับไม่ถูกต้อง');
 
 		return {
 			name: loadData.name,
@@ -116,19 +172,7 @@ async function _bot_main(send2mail: boolean): Promise<StatusData> {
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;
-		const m = `ไม่สามารถเชื่อมต่อบอทหลักได้: ${err}`;
-		console.error(m);
-		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
-		return {
-			name: `bot`,
-			status: 0,
-			ping: undefined,
-			uptime: undefined,
-			startTime: undefined,
-			host: undefined,
-			version: undefined,
-			resources: undefined
-		};
+		return failed('bot', describeError(err), send2mail);
 	}
 };
 
@@ -157,9 +201,9 @@ export async function getDatabasePing(send2mail: boolean = true) {
 
 async function _backend(send2mail: boolean): Promise<StatusData> {
 	try{
-		const res = await axios.get<StatusData>(`http://${process.env.LOCALHOST}:30063/`);
+		const res = await axios.get<StatusData>(`http://${process.env.LOCALHOST}:30063/`, { timeout: SERVICE_TIMEOUT_MS });
 		const loadData = res.data;
-		if(!loadData || !loadData.name || !loadData.status)throw `no data`;
+		if(!loadData || !loadData.name || !loadData.status) throw new Error('ข้อมูลที่ได้รับไม่ถูกต้อง');
 
 		return {
 			name: loadData.name,
@@ -173,30 +217,20 @@ async function _backend(send2mail: boolean): Promise<StatusData> {
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;
-		const m = `ไม่สามารถเชื่อมต่อbackendได้: ${err}`;
-		console.error(m);
-		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
-		return {
-			name: `backend`,
-			status: 0,
-			ping: undefined,
-			uptime: undefined,
-			startTime: undefined,
-			host: undefined,
-			version: undefined,
-			resources: undefined
-		};
+		return failed('backend', describeError(err), send2mail);
 	}
 };
 
 async function _frontend_main(send2mail: boolean): Promise<StatusData> {
 	const startTime = Date.now();
 	try{
-		const res = await axios.get(`https://yumistack.net/`, { httpsAgent });
+		const res = await axios.get(`https://yumistack.net/`, { httpsAgent, timeout: FRONTEND_TIMEOUT_MS });
+		if (res.status < 200 || res.status >= 400) throw new Error(`HTTP ${res.status}`);
 
+		active.delete('frontend_main');
 		return {
 			name: `frontend_main`,
-			status: res.status == 200 ? 1 : 0,
+			status: 1,
 			ping: (Date.now() - startTime),
 			uptime: undefined,
 			startTime: undefined,
@@ -206,19 +240,7 @@ async function _frontend_main(send2mail: boolean): Promise<StatusData> {
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;
-		const m = `ไม่สามารถเชื่อมต่อเว็บไซต์หลักได้: ${err}`;
-		console.error(m);
-		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
-		return {
-			name: `frontend_main`,
-			status: 0,
-			ping: undefined,
-			uptime: undefined,
-			startTime: undefined,
-			host: undefined,
-			version: undefined,
-			resources: undefined
-		};
+		return failed('frontend_main', describeError(err), send2mail);
 	}
 };
 
@@ -239,8 +261,9 @@ async function _database(send2mail: boolean): Promise<StatusData> {
 
 		await connection.end();
 
-		if(isNaN(uptimeSeconds))throw `Invalid Uptime value`;
+		if(isNaN(uptimeSeconds)) throw new Error('ค่า Uptime ของฐานข้อมูลไม่ถูกต้อง');
 
+		active.delete(name);
 		return {
 			name,
 			status: uptimeSeconds ? 1 : 0,
@@ -251,17 +274,7 @@ async function _database(send2mail: boolean): Promise<StatusData> {
 			version
 		};
 	}catch(err){
-		const m = `ไม่สามารถเชื่อมต่อฐานข้อมูลได้: ${err}`;
-		console.error(m);
-		if(send2mail){sendEmailAlert(`thirphathrphlphun@gmail.com`, mailText.error, m)};
-		return {
-			name,
-			status: 0,
-			ping: undefined,
-			uptime: undefined,
-			startTime: undefined,
-			host: undefined,
-			version
-		};
+		const s = failed(name, describeError(err), send2mail);
+		return { ...s, version };
 	}
 };

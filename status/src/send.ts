@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { formatDataSize } from 'global/common-functions';
 import { Client, GatewayIntentBits, GuildTextBasedChannel, MessageFlags, ContainerBuilder, TextDisplayBuilder } from 'discord.js';
-import { backend, bot_main, database, frontend_main } from './check.js';
+import { backend, bot_main, database, frontend_main, getActiveError, getLastError } from './check.js';
 import { getBrief, type Brief } from './history.js';
 import { displayName, fmtDurTh } from './format.js';
 import { sendStatusMail, type MailItem } from './mail.js';
@@ -17,6 +17,14 @@ const row = (label: string, value: string | null | undefined) => `${value == nul
 function body(s: StatusData, b: Brief): string {
 	const L: string[] = [];
 	L.push(s.status === 1 ? '**:green_circle:  กำลังทำงาน**' : s.status === -1 ? '**:blue_circle:  กำลังเริ่มระบบ**' : '**:red_circle:  หยุดทำงาน**');
+
+	if (s.status === 0) {
+		const e = getActiveError(s.name);
+		L.push(row('สาเหตุ', e ? e.message : 'ไม่ทราบสาเหตุ'));
+	} else if (s.status === 1) {
+		const e = getLastError(s.name);
+		if (e) L.push(`-# ข้อผิดพลาดล่าสุดก่อนหน้า: ${e.message} (${ts(e.at, 'R')})`);
+	}
 
 	if (b.state === 'up') {
 		// กำลังทำงาน -> Uptime + Downtime ล่าสุด

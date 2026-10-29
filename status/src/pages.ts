@@ -1,6 +1,7 @@
 import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
-import { RANGE_LIST, type Brief, type Range, type Report } from './history.js';
+import { RANGE_LIST, type Brief, type Range, type Report, type SeriesPoint } from './history.js';
+import { COLORS, seriesLine, svgChart } from './chart.js';
 import { displayName, fmtDateTh, fmtDayTh, fmtDurTh, fmtPct, stateTh } from './format.js';
 
 export type Item = { s: StatusData; r: Report; b: Brief };
@@ -260,7 +261,14 @@ ${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กรา�
 	return shell('Yumi - สถานะระบบ', embed ? '' : brand, main, overall.key, embed);
 }
 
-export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range): string {
+/** กราฟ CPU และ RAM ของบริการ (แสดงเฉพาะบริการที่ส่งค่าเหล่านี้มา) */
+const resourcePanels = (series: SeriesPoint[]) => {
+	if (!series.some(p => p.cpu !== null || p.memMb !== null)) return '';
+	return `<section class="panel glass"><h2>CPU (%)</h2>${svgChart([seriesLine(series, 'cpu', 'CPU', COLORS[0])], '%')}</section>
+<section class="panel glass"><h2>หน่วยความจำ RAM (MB)</h2>${svgChart([seriesLine(series, 'memMb', 'RAM', COLORS[2])], ' MB')}</section>`;
+};
+
+export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: number, range: Range, series: SeriesPoint[] = []): string {
 	const now = Date.now();
 	const st = stateTh(s.status);
 	const limited = limitedUntil > now;
@@ -325,6 +333,7 @@ export function renderDetail(s: StatusData, r: Report, b: Brief, limitedUntil: n
 	<div class="strip">${strip}</div>
 	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>ตอนนี้</span></div></section>
 <section class="panel glass spark"><h2>เวลาตอบสนอง</h2>${spark}</section>
+${resourcePanels(series)}
 <section class="panel glass"><h2>ประวัติ downtime</h2>${incidents}</section>`;
 
 	return shell(`Yumi - สถานะระบบ (${esc(displayName(s.name))})`, backBtn + brand, main, st.key);

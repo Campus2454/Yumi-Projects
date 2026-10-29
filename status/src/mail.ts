@@ -4,6 +4,7 @@ import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
 import type { Brief } from './history.js';
 import { displayName, fmtDateTh, fmtDurTh } from './format.js';
+import { getActiveError, getLastError } from './check.js';
 
 /**
  * ตั้งค่าอีเมลผ่าน env (ถ้าไม่ตั้ง SMTP_USER / SMTP_PASS จะข้ามการส่งอีเมล)
@@ -56,6 +57,25 @@ function chips(s: StatusData): string {
 	return c.map(t => `<span style="display:inline-block;margin:0 6px 6px 0;padding:4px 10px;border-radius:999px;background:#2a1417;border:1px solid #432226;color:#d8b9b5;font-size:12px;">${esc(t)}</span>`).join('');
 }
 
+/** ข้อความสาเหตุ: ถ้าหยุดทำงานจะบอกสาเหตุปัจจุบัน ถ้ากลับมาแล้วจะบอกข้อผิดพลาดล่าสุดก่อนหน้า */
+function errorText(s: StatusData): string | null {
+	if (s.status === 0) {
+		const e = getActiveError(s.name);
+		return `สาเหตุ: ${e ? e.message : 'ไม่ทราบสาเหตุ'}`;
+	}
+	if (s.status === 1) {
+		const e = getLastError(s.name);
+		if (e) return `ข้อผิดพลาดล่าสุดก่อนหน้า: ${e.message} (${fmtDateTh(e.at)})`;
+	}
+	return null;
+}
+
+function errorRow(s: StatusData): string {
+	const t = errorText(s);
+	if (!t) return '';
+	return `<tr><td style="padding:12px 22px 0 22px;font-family:${FONT};font-size:13px;line-height:1.6;color:#ff9ea1;">${esc(t)}</td></tr>`;
+}
+
 function card(it: MailItem): string {
 	const { s } = it;
 	const k = kindOf(s), col = COLOR[k];
@@ -83,6 +103,7 @@ function card(it: MailItem): string {
 		</td>
 	</tr></table>
 </td></tr>
+${errorRow(s)}
 <tr><td style="padding:12px 22px 14px 22px;font-family:${FONT};">${chips(s)}</td></tr>
 </table></td></tr>`;
 }
@@ -167,7 +188,8 @@ ${url ? `<tr><td align="center" style="padding:10px 0 6px 0;">
 		`Yumi Status - ${title}`, sub, '',
 		...items.map(it => {
 			const { cur, last } = metrics(it);
-			return `${displayName(it.s.name)}: ${labelOf(it.s)}\n  ${cur.label}: ${cur.value} (${cur.note})\n  ${last.label}: ${last.value} (${last.note})`;
+			const et = errorText(it.s);
+			return `${displayName(it.s.name)}: ${labelOf(it.s)}\n  ${cur.label}: ${cur.value} (${cur.note})\n  ${last.label}: ${last.value} (${last.note})${et ? `\n  ${et}` : ''}`;
 		}),
 		url ? `\nดูหน้าสถานะ: ${url}` : '',
 	].join('\n');
