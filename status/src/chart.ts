@@ -211,7 +211,10 @@ export function renderMetricsPage(data: Record<string, SeriesPoint[]>, range: Ra
 <style>
 :root{color-scheme:dark}
 body{margin:0;padding:24px 16px;background:#060203;color:#fff3f1;font-family:'Kanit',system-ui,sans-serif}
-h1{margin:0 0 12px;font-size:1.6rem}
+h1{margin:0;font-size:1.6rem}
+.top{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.back{padding:7px 14px;border-radius:999px;border:1px solid #432226;color:#d8b9b5;text-decoration:none;font-size:.9rem}
+.back:hover{color:#fff;border-color:#8a2c30}
 .tabs{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
 .tabs a{padding:6px 14px;border-radius:999px;border:1px solid #432226;color:#d8b9b5;text-decoration:none;font-size:.9rem}
 .tabs a.on{background:#f13b3b;border-color:#f13b3b;color:#fff}
@@ -224,7 +227,7 @@ ${UI_CSS}
 </style></head>
 <body>
 <div class="grid">
-<h1>กราฟสถานะระบบ</h1>
+<div class="top"><a class="back" href="/">← กลับหน้าสถานะ</a><h1>กราฟสถานะระบบ</h1></div>
 <nav class="tabs">${tabs}</nav>
 ${panels}
 </div>

@@ -2,6 +2,7 @@ import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
 import { RANGE_LIST, type Banner, type Brief, type Range, type Report, type SeriesPoint } from './history.js';
 import { COLORS, UI_BODY, UI_CSS, UI_SCRIPT, seriesLine, svgChart } from './chart.js';
+import { SUB_CSS, SUB_JS, SUB_MODAL } from './subscribe-modal.js';
 import { displayName, fmtDateTh, fmtDayTh, fmtDurTh, fmtPct, stateTh } from './format.js';
 
 export type Item = { s: StatusData; r: Report; b: Brief };
@@ -137,7 +138,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .strip i{cursor:pointer;transition:filter .15s}
 .strip i:hover{filter:brightness(1.35)}
 .strip i.load{background:var(--load)}
-${UI_CSS}
+${UI_CSS}${SUB_CSS}
 .foot{margin-top:28px;text-align:center;color:var(--dim);font-size:.82rem;font-weight:300}
 @media (max-width:720px){
 	.svc{grid-template-columns:1fr auto;gap:14px}.svc .bars{grid-column:1/-1;order:3}
@@ -193,8 +194,10 @@ ${main}
 </main>
 <p class="foot">เวลาทั้งหมดแสดงเป็นเวลาประเทศไทย (GMT+7)</p>
 </div>
+${SUB_MODAL}
 ${UI_BODY}
 <script>${SCRIPT}</script>
+<script>${SUB_JS}</script>
 <script>${UI_SCRIPT}</script>
 </body>
 </html>`;
@@ -273,7 +276,7 @@ ${n ? `<section class="list glass">${rows}</section>` : ''}
 	<span><i style="background:var(--down)"></i>ล่มนานกว่านั้น</span>
 	<span><i style="background:rgba(255,255,255,.12)"></i>ไม่มีข้อมูล</span>
 </div>
-${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กราฟ CPU / RAM / Ping</a><a href="/subscribe">รับการแจ้งเตือนทางอีเมล</a></nav>`}`;
+${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กราฟ CPU / RAM / Ping</a><button type="button" class="linkbtn" data-sub-open>รับการแจ้งเตือนทางอีเมล</button></nav>`}`;
 	return shell('Yumi - สถานะระบบ', embed ? '' : brand, main, overall.key, embed);
 }
 

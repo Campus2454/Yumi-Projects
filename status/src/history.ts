@@ -470,3 +470,21 @@ export async function setSegmentNote(id: number, cause: string | null, note: str
 	cache.clear();
 	return (r.rowCount ?? 0) > 0;
 }
+
+/** ช่วงหยุดทำงาน 1 รายการ (สำหรับหน้าแก้ไขของแอดมิน) */
+export async function getSegment(id: number): Promise<{ id: number; service: string; start: number; end: number | null; cause: string | null; note: string | null } | null> {
+	await initHistory();
+	const r = (await pool.query<SegRow & { service: string }>(
+		`SELECT id, service, status, started_at, ended_at, last_seen, cause, note FROM segments WHERE id = $1 AND status = 0`,
+		[id],
+	)).rows[0];
+	if (!r) return null;
+	return {
+		id: Number(r.id),
+		service: r.service,
+		start: Number(r.started_at),
+		end: r.ended_at === null ? null : Number(r.ended_at),
+		cause: r.cause,
+		note: r.note,
+	};
+}

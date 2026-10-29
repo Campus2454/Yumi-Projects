@@ -134,8 +134,9 @@ app.get('/', wrap(async (req, res) => {
 	res.send(renderIndex(items, getRateLimits(), range, false, await pageCtx()));
 }));
 
+// หน้ารับการแจ้งเตือนเป็น popup ในหน้าแรกแล้ว ลิงก์เดิมจะพาไปเปิด popup
 app.get('/subscribe', (req: any, res: any) => {
-	res.send(renderSubscribePage());
+	res.redirect(302, '/?subscribe=1');
 });
 
 app.post('/api/subscribe', wrap(async (req, res) => {
