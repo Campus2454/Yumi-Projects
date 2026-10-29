@@ -130,3 +130,32 @@ const confirmHtml = (link: string) => `<!doctype html><html lang="th"><body styl
 
 const confirmText = (link: string) =>
 	`ยืนยันการรับแจ้งเตือน Yumi Status\n\nกดลิงก์นี้เพื่อยืนยัน (ใช้ได้ 48 ชั่วโมง):\n${link}\n\nหากไม่ได้สมัคร ไม่ต้องทำอะไร`;
+/* ---------- ฟังก์ชันสำหรับหน้าแอดมิน ---------- */
+
+export async function adminCounts(): Promise<{ active: number; pending: number; revoked: number }> {
+	await initSubscribers();
+	const rows = (await pool.query<{ status: string; n: string }>(`SELECT status, COUNT(*) AS n FROM subscribers GROUP BY status`)).rows;
+	const out = { active: 0, pending: 0, revoked: 0 };
+	for (const r of rows) if (r.status === 'active' || r.status === 'pending' || r.status === 'revoked') out[r.status] = Number(r.n);
+	return out;
+}
+
+export async function adminListSubscribers(limit = 100): Promise<{ id: string; email: string; status: string; created_at: string }[]> {
+	await initSubscribers();
+	return (await pool.query<{ id: string; email: string; status: string; created_at: string }>(
+		`SELECT id, email, status, created_at FROM subscribers ORDER BY id DESC LIMIT $1`,
+		[Math.min(Math.max(limit, 1), 500)],
+	)).rows;
+}
+
+/** ยกเลิกการรับอีเมลของผู้ใช้คนหนึ่ง (ไม่ส่งอีเมลอีก) */
+export async function adminRevoke(id: number): Promise<void> {
+	await initSubscribers();
+	await pool.query(`UPDATE subscribers SET status = 'revoked', revoked_at = $2 WHERE id = $1 AND status <> 'revoked'`, [id, Date.now()]);
+}
+
+/** ลบผู้ใช้ออกจากระบบทั้งหมด */
+export async function adminDeleteSubscriber(id: number): Promise<void> {
+	await initSubscribers();
+	await pool.query(`DELETE FROM subscribers WHERE id = $1`, [id]);
+}

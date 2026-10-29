@@ -1,11 +1,12 @@
 import cron from 'node-cron';
 import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
-import { recordStatus, getReport, getBrief, getSeries, parseRange, initHistory } from './history.js';
+import { recordStatus, getReport, getBrief, getSeries, getBanner, getMaintenance, parseRange, initHistory } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
 import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSubscribers } from './subscribers.js';
 import { renderSubscribePage, renderConfirmResult, renderUnsubResult } from './subscribe-page.js';
 import { renderMetricsPage } from './chart.js';
+import { registerAdmin } from './admin.js';
 import chalk from 'chalk';
 import { StatusData } from 'global/types';
 import express from 'express';
@@ -20,6 +21,9 @@ const app = express();
 /** service ที่มีกราฟ */
 const METRIC_SERVICES = ['bot', 'backend', 'frontend_main', 'database'];
 
+/** ประกาศและโหมดปรับปรุงที่แอดมินตั้งไว้ ส่งให้หน้าเว็บแสดงผล */
+const pageCtx = async () => ({ banner: await getBanner(), maint: await getMaintenance() });
+
 async function checkAll() {
 	console.log(`${chalk.gray(`[${(new Date()).toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit', })}]`)} Checking status...`);
 	try{
@@ -28,9 +32,11 @@ async function checkAll() {
 		// บันทึก timeline และตัวอย่างค่า (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
 		recordStatus(allS);
 
+		const maint = await getMaintenance();
 		changedStatus = allS.filter(current => {
 			const prevStatus = prevS.find(s => s.name === current.name)?.status;
-			return prevStatus !== current.status;
+			// service ที่กำลังปรับปรุงไม่ส่งการแจ้งเตือน (แต่ประวัติยังถูกบันทึกตามจริง)
+			return prevStatus !== current.status && !(current.name in maint);
 		});
 		console.log(changedStatus);
 
@@ -116,13 +122,13 @@ app.get('/iframe', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const items = await Promise.all(allS.map(async s => ({ s, r: await getReport(s.name, range), b: await getBrief(s) })));
 	res.set('Content-Security-Policy', "frame-ancestors *");
-	res.send(renderIndex(items, getRateLimits(), range, true));
+	res.send(renderIndex(items, getRateLimits(), range, true, await pageCtx()));
 }));
 
 app.get('/', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const items = await Promise.all(allS.map(async s => ({ s, r: await getReport(s.name, range), b: await getBrief(s) })));
-	res.send(renderIndex(items, getRateLimits(), range));
+	res.send(renderIndex(items, getRateLimits(), range, false, await pageCtx()));
 }));
 
 app.get('/subscribe', (req: any, res: any) => {
@@ -150,13 +156,16 @@ app.all('/subscribe/unsubscribe', wrap(async (req, res) => {
 	res.send(renderUnsubResult(ok));
 }));
 
+// หน้าผู้ดูแล /admin (ต้องลงทะเบียนก่อน /:name)
+registerAdmin(app, () => allS);
+
 // ต้องอยู่หลัง /metrics และ /api/* เพื่อไม่ให้ถูกจับเป็นชื่อ service
 app.get(`/:name`, wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const status = allS.find(s => s.name === req.params.name);
 	if (!status) { res.status(404).send(renderNotFound(req.params.name)); return; }
-	const [r, b, series] = await Promise.all([getReport(status.name, range), getBrief(status), getSeries(status.name, range)]);
-	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range, series));
+	const [r, b, series, ctx] = await Promise.all([getReport(status.name, range), getBrief(status), getSeries(status.name, range), pageCtx()]);
+	res.status(status.status === 1 ? 200 : 503).send(renderDetail(status, r, b, getRateLimits()[status.name] ?? 0, range, series, ctx));
 }));
 
 // เริ่มเฝ้าดูหลังเชื่อมต่อ DB สำเร็จ เพื่อไม่ให้บันทึกประวัติหาย

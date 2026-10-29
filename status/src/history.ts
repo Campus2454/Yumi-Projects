@@ -1,11 +1,14 @@
 import pg from 'pg';
 import type { StatusData } from 'global/types';
+import { getActiveError } from './check.js';
 
 /**
  * ประวัติสถานะเก็บใน PostgreSQL (DATABASE_URL)
  * - segments: ช่วงเวลาที่ service อยู่ในสถานะหนึ่ง (1 = running, 0 = down, -1 = loading) เก็บถาวร
+ *             + cause (สาเหตุที่พังตอนเริ่มช่วง) + note (หมายเหตุจากแอดมิน)
  * - pings:    ตัวอย่าง ping ทุก 60 วินาที (เก็บ 90 วัน) ใช้สำหรับสถิติเดิม
  * - samples:  ตัวอย่างทุก SAMPLE_EVERY_MS: ping, uptime, cpu, ram, version (เก็บ 90 วัน) ใช้สำหรับกราฟ
+ * - settings: ค่าที่แอดมินตั้งเอง (ประกาศ, โหมดปรับปรุง)
  *
  * ต้องเรียก `await initHistory()` ก่อนเริ่มรับ request หรือเช็คสถานะ
  */
@@ -34,14 +37,18 @@ const pool = new pg.Pool({
 });
 pool.on('error', e => console.error('PostgreSQL pool error:', e));
 
-type SegRow = { status: number; started_at: string; ended_at: string | null; last_seen: string };
+const SEG_COLS = 'id, status, started_at, ended_at, last_seen, cause, note';
+type SegRow = { id: string; status: number; started_at: string; ended_at: string | null; last_seen: string; cause: string | null; note: string | null };
 // pg คืนค่า bigint เป็น string จึงแปลงเป็น number ทุกครั้ง
-type Seg = { status: number; start: number; end: number | null; lastSeen: number };
+type Seg = { id: number; status: number; start: number; end: number | null; lastSeen: number; cause: string | null; note: string | null };
 const toSeg = (r: SegRow): Seg => ({
+	id: Number(r.id),
 	status: r.status,
 	start: Number(r.started_at),
 	end: r.ended_at === null ? null : Number(r.ended_at),
 	lastSeen: Number(r.last_seen),
+	cause: r.cause,
+	note: r.note,
 });
 
 let ready: Promise<void> | null = null;
@@ -81,6 +88,14 @@ export function initHistory(): Promise<void> {
 					mem_percent REAL,
 					PRIMARY KEY (service, ts)
 				);
+				ALTER TABLE segments ADD COLUMN IF NOT EXISTS cause TEXT;
+				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note TEXT;
+				ALTER TABLE segments ADD COLUMN IF NOT EXISTS note_at BIGINT;
+				CREATE TABLE IF NOT EXISTS settings(
+					key TEXT PRIMARY KEY,
+					value TEXT NOT NULL,
+					updated_at BIGINT NOT NULL
+				);
 			`);
 			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ ให้ปิดที่เวลาที่เห็นล่าสุด (ไม่นับเป็น downtime)
 			await pool.query(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`);
@@ -89,6 +104,27 @@ export function initHistory(): Promise<void> {
 	}
 	return ready;
 }
+
+/* ---------- การตั้งค่าที่แอดมินแก้ได้ ---------- */
+export type Banner = { level: 'info' | 'warn' | 'danger'; text: string } | null;
+
+export async function getSetting<T>(key: string, fallback: T): Promise<T> {
+	await initHistory();
+	const r = (await pool.query<{ value: string }>(`SELECT value FROM settings WHERE key = $1`, [key])).rows[0];
+	if (!r) return fallback;
+	try { return JSON.parse(r.value) as T; } catch { return fallback; }
+}
+export async function setSetting(key: string, value: unknown): Promise<void> {
+	await initHistory();
+	await pool.query(
+		`INSERT INTO settings(key, value, updated_at) VALUES ($1, $2, $3)
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at`,
+		[key, JSON.stringify(value), Date.now()],
+	);
+}
+export const getBanner = () => getSetting<Banner>('banner', null);
+/** service ที่กำลังปรับปรุง: { ชื่อ service: ข้อความ } */
+export const getMaintenance = () => getSetting<Record<string, string>>('maintenance', {});
 
 /* ---------- การเขียน (cache สถานะที่เปิดอยู่ในหน่วยความจำ ลดการ query) ---------- */
 const open = new Map<string, { id: string; status: number; touched: number }>();
@@ -111,9 +147,10 @@ async function write(list: StatusData[], now: number) {
 			const cur = open.get(s.name);
 			if (!cur || cur.status !== s.status) {
 				if (cur) await client.query(`UPDATE segments SET ended_at = $1, last_seen = $1 WHERE id = $2`, [now, cur.id]);
+				const cause = s.status === 0 ? (getActiveError(s.name)?.message ?? null) : null;
 				const r = await client.query<{ id: string }>(
-					`INSERT INTO segments(service, status, started_at, last_seen) VALUES ($1, $2, $3, $3) RETURNING id`,
-					[s.name, s.status, now],
+					`INSERT INTO segments(service, status, started_at, last_seen, cause) VALUES ($1, $2, $3, $3, $4) RETURNING id`,
+					[s.name, s.status, now, cause],
 				);
 				open.set(s.name, { id: r.rows[0].id, status: s.status, touched: now });
 			} else if (now - cur.touched >= TOUCH_MS) {
@@ -176,7 +213,7 @@ export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> 
 	const state = s.status === 1 ? 'up' : s.status === 0 ? 'down' : 'loading';
 
 	const cur = (await pool.query<SegRow>(
-		`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = $1 ORDER BY started_at DESC LIMIT 1`,
+		`SELECT ${SEG_COLS} FROM segments WHERE service = $1 ORDER BY started_at DESC LIMIT 1`,
 		[s.name],
 	)).rows[0];
 	const isOpen = cur && cur.ended_at === null ? toSeg(cur) : null;
@@ -188,7 +225,7 @@ export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> 
 	let last: Brief['last'] = null;
 	if (state !== 'loading') {
 		const r = (await pool.query<SegRow>(
-			`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = $1 AND status = $2 ORDER BY started_at DESC LIMIT 1`,
+			`SELECT ${SEG_COLS} FROM segments WHERE service = $1 AND status = $2 ORDER BY started_at DESC LIMIT 1`,
 			[s.name, state === 'up' ? 0 : 1],
 		)).rows[0];
 		if (r) {
@@ -201,9 +238,19 @@ export async function getBrief(s: StatusData, now = Date.now()): Promise<Brief> 
 }
 
 /* ------------------------------------------------------------------ */
-/*  Series: ข้อมูลสำหรับกราฟ (รวมเป็น SERIES_POINTS จุดในช่วงเวลา)        */
+/*  Series: ข้อมูลสำหรับกราฟ (รวมเป็น SERIES_POINTS + 1 จุดในช่วงเวลา)    */
 /* ------------------------------------------------------------------ */
-export interface SeriesPoint { ts: number; cpu: number | null; memMb: number | null; ping: number | null; status: number | null }
+export interface SeriesPoint {
+	ts: number;
+	cpu: number | null;
+	memMb: number | null;
+	ping: number | null;
+	uptimeH: number | null;
+	downPct: number | null;
+	status: number | null;
+}
+
+const r1 = (v: number | null | undefined) => (v == null ? null : Math.round(v * 10) / 10);
 
 /** คืน SERIES_POINTS + 1 จุดเสมอ ช่วงที่ไม่มีข้อมูลเป็น null (กราฟจะขาดตรงนั้น) */
 export async function getSeries(service: string, range: Range = '24h', now = Date.now()): Promise<SeriesPoint[]> {
@@ -212,11 +259,13 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 	const from = now - span;
 	const size = Math.max(span / SERIES_POINTS, 1000);
 
-	const rows = (await pool.query<{ k: number; cpu: number | null; mem: number | null; ping: number | null; st: number | null }>(
+	const rows = (await pool.query<{ k: number; cpu: number | null; mem: number | null; ping: number | null; up: number | null; dn: number | null; st: number | null }>(
 		`SELECT FLOOR((ts - $2::bigint)::float8 / $3::float8)::int AS k,
 		        AVG(cpu)::float8 AS cpu,
 		        AVG(mem_used)::float8 AS mem,
 		        AVG(ping)::float8 AS ping,
+		        AVG(uptime)::float8 AS up,
+		        AVG(CASE WHEN status = 0 THEN 100.0 ELSE 0.0 END)::float8 AS dn,
 		        MIN(status)::int AS st
 		 FROM samples
 		 WHERE service = $1 AND ts >= $2::bigint
@@ -230,9 +279,11 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 		const r = byK.get(k);
 		out.push({
 			ts: from + k * size + size / 2,
-			cpu: r?.cpu == null ? null : Math.round(r.cpu * 10) / 10,
-			memMb: r?.mem == null ? null : Math.round((r.mem / 1048576) * 10) / 10,
-			ping: r?.ping == null ? null : Math.round(r.ping),
+			cpu: r ? r1(r.cpu) : null,
+			memMb: r && r.mem != null ? r1(r.mem / 1048576) : null,
+			ping: r && r.ping != null ? Math.round(r.ping) : null,
+			uptimeH: r && r.up != null ? r1(r.up / 3600) : null,
+			downPct: r ? r1(r.dn) : null,
 			status: r?.st ?? null,
 		});
 	}
@@ -243,14 +294,32 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 /*  Report: ข้อมูลสำหรับหน้าเว็บตามช่วงเวลาที่เลือก                     */
 /* ------------------------------------------------------------------ */
 export interface Stat { observed: number; down: number; incidents: number; longest: number; pct: number | null }
+export interface StripItem {
+	left: number;
+	width: number;
+	status: number;
+	start: number;
+	end: number;
+	open: boolean;
+	cause: string | null;
+	note: string | null;
+}
+export interface Incident {
+	id: number;
+	start: number;
+	end: number | null;
+	duration: number;
+	cause: string | null;
+	note: string | null;
+}
 export interface Report {
 	now: number;
 	range: Range;
 	from: number;
 	stat: Stat;
 	buckets: { start: number; end: number; observed: number; down: number }[];
-	strip: { left: number; width: number; status: number; start: number; end: number }[];
-	incidents: { start: number; end: number | null; duration: number }[];
+	strip: StripItem[];
+	incidents: Incident[];
 	pingFrom: number;
 	pings: { ts: number; ping: number }[];
 	pingStats: { min: number; avg: number; max: number } | null;
@@ -272,9 +341,17 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 	const from = now - span;
 
 	const segs = (await pool.query<SegRow>(
-		`SELECT status, started_at, ended_at, last_seen FROM segments WHERE service = $1 AND (ended_at IS NULL OR ended_at > $2) ORDER BY started_at`,
+		`SELECT ${SEG_COLS} FROM segments WHERE service = $1 AND (ended_at IS NULL OR ended_at > $2::bigint) ORDER BY started_at`,
 		[service, from],
-	)).rows.map(toSeg).map(g => ({ status: g.status, start: g.start, end: g.end ?? now, open: g.end === null }));
+	)).rows.map(toSeg).map(g => ({
+		id: g.id,
+		status: g.status,
+		start: g.start,
+		end: g.end ?? now,
+		open: g.end === null,
+		cause: g.cause,
+		note: g.note,
+	}));
 
 	let observed = 0, down = 0, incidents = 0, longest = 0;
 	for (const g of segs) {
@@ -297,32 +374,49 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 		return { start, end, observed: ob, down: dn };
 	});
 
-	const strip = segs
+	const strip: StripItem[] = segs
 		.filter(g => overlap(g.start, g.end, from, now) > 0)
 		.slice(-500)
 		.map(g => {
 			const s = Math.max(g.start, from), e = Math.min(g.end, now);
 			const width = Math.max(((e - s) / span) * 100, g.status === 0 ? 0.6 : 0.3);
-			return { left: Math.min(((s - from) / span) * 100, 100 - width), width, status: g.status, start: s, end: e };
+			return {
+				left: Math.min(((s - from) / span) * 100, 100 - width),
+				width,
+				status: g.status,
+				start: g.start,
+				end: g.end,
+				open: g.open,
+				cause: g.cause,
+				note: g.note,
+			};
 		});
 
-	const incs = segs
+	const incs: Incident[] = segs
 		.filter(g => g.status === 0)
 		.reverse()
 		.slice(0, 10)
-		.map(g => ({ start: g.start, end: g.open ? null : g.end, duration: g.end - g.start }));
+		.map(g => ({
+			id: g.id,
+			start: g.start,
+			end: g.open ? null : g.end,
+			duration: g.end - g.start,
+			cause: g.cause,
+			note: g.note,
+		}));
 
 	// ping: รวมเป็น 120 จุดในช่วง (AVG ใน SQL)
+	// หมายเหตุ: ต้องกำหนดชนิดพารามิเตอร์ให้ชัด เพราะ psize เป็นทศนิยมได้
 	const pingFrom = Math.max(from, now - PING_KEEP_MS);
 	const N = 120, psize = Math.max((now - pingFrom) / N, 1);
 	const pings = (await pool.query<{ k: number; p: number }>(
-		`SELECT CAST(FLOOR((ts - $2) / $3) AS INTEGER) AS k, AVG(ping)::float AS p
-		 FROM pings WHERE service = $1 AND ts >= $2 GROUP BY k ORDER BY k`,
+		`SELECT CAST(FLOOR((ts - $2::bigint)::float8 / $3::float8) AS INTEGER) AS k, AVG(ping)::float AS p
+		 FROM pings WHERE service = $1 AND ts >= $2::bigint GROUP BY k ORDER BY k`,
 		[service, pingFrom, psize],
 	)).rows.map((r: { k: number; p: number }) => ({ ts: pingFrom + Math.min(r.k, N - 1) * psize + psize / 2, ping: Math.round(r.p) }));
 
 	const ps = (await pool.query<{ mn: number | null; mx: number | null; av: number | null; n: string }>(
-		`SELECT MIN(ping) AS mn, MAX(ping) AS mx, AVG(ping)::float AS av, COUNT(*) AS n FROM pings WHERE service = $1 AND ts >= $2`,
+		`SELECT MIN(ping) AS mn, MAX(ping) AS mx, AVG(ping)::float AS av, COUNT(*) AS n FROM pings WHERE service = $1 AND ts >= $2::bigint`,
 		[service, pingFrom],
 	)).rows[0];
 	const pingStats = Number(ps.n) > 0 ? { min: ps.mn!, avg: Math.round(ps.av!), max: ps.mx! } : null;
@@ -330,4 +424,32 @@ export async function getReport(service: string, range: Range = '30d', now = Dat
 	const rep: Report = { now, range, from, stat, buckets, strip, incidents: incs, pingFrom, pings, pingStats };
 	cache.set(key, { at: now, rep });
 	return rep;
+}
+
+/* ---------- ฟังก์ชันสำหรับหน้าแอดมิน ---------- */
+
+/** เหตุการณ์หยุดทำงานล่าสุดของทุก service (สำหรับให้แอดมินใส่สาเหตุ/หมายเหตุ) */
+export async function recentDowns(limit = 40): Promise<{ id: number; service: string; start: number; end: number | null; cause: string | null; note: string | null }[]> {
+	await initHistory();
+	const rows = (await pool.query<SegRow & { service: string }>(
+		`SELECT id, service, status, started_at, ended_at, last_seen, cause, note
+		 FROM segments WHERE status = 0 ORDER BY started_at DESC LIMIT $1`,
+		[limit],
+	)).rows;
+	return rows.map(r => ({
+		id: Number(r.id),
+		service: r.service,
+		start: Number(r.started_at),
+		end: r.ended_at === null ? null : Number(r.ended_at),
+		cause: r.cause,
+		note: r.note,
+	}));
+}
+
+/** แก้สาเหตุ/หมายเหตุของช่วงหยุดทำงาน 1 ครั้ง */
+export async function setSegmentNote(id: number, cause: string | null, note: string | null): Promise<boolean> {
+	await initHistory();
+	const r = await pool.query(`UPDATE segments SET cause = $2, note = $3, note_at = $4 WHERE id = $1`, [id, cause, note, Date.now()]);
+	cache.clear();
+	return (r.rowCount ?? 0) > 0;
 }
