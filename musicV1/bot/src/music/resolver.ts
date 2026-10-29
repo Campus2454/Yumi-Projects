@@ -1,0 +1,242 @@
+import chalk from "chalk";
+import { Kazagumo, KazagumoSearchResult, KazagumoTrack } from "kazagumo";
+import { Constants, LavalinkResponse, LoadType, Node, Track } from "shoukaku";
+import { breakerAllow, breakerFailure, breakerSuccess } from "./breaker.js";
+import { cacheDropUri, cacheGet, cachePut, cacheSearchTitles, negativeHas, negativePut, normalizeQuery } from "./cache.js";
+import { musicConfig, SOURCES, sourceEnabled } from "./config.js";
+import { Semaphore, userAllow } from "./limiter.js";
+
+const head = chalk.cyan.bold('[Resolver]');
+const youtubeGate = new Semaphore(() => musicConfig().youtubeConcurrency);
+
+export type MusicNotice = 'youtube_unavailable' | 'rate_limited';
+export type MusicSearchResult = KazagumoSearchResult & { notice?: MusicNotice; fromCache?: boolean };
+export type MusicSearchOptions = {
+  requester?: unknown;
+  userId?: string;
+  // Search on the node that will play the track. Encoded tracks are not guaranteed to move between NodeLink and Lavalink.
+  nodeName?: string;
+  kind?: 'play' | 'autocomplete';
+  // Source keys to skip (used when a track from that source just failed).
+  exclude?: string[];
+};
+
+// Errors that belong to one video, not to YouTube blocking us. They must not trip the breaker.
+const TRACK_SPECIFIC = /unavailable|private|age|removed|copyright|not available in your country|members only|premiere/i;
+
+export function sourceKeyOf(sourceName: string | undefined) {
+  if (!sourceName) return 'unknown';
+  if (sourceName.startsWith('youtube')) return 'youtube';
+  return SOURCES[sourceName]?.key ?? sourceName;
+}
+
+function urlSourceKey(url: string) {
+  const host = (() => { try { return new URL(url).hostname.replace(/^www\.|^m\.|^music\./, ''); } catch { return ''; } })();
+  if (host === 'youtube.com' || host === 'youtu.be') return 'youtube';
+  if (host.endsWith('soundcloud.com')) return 'soundcloud';
+  // Spotify/Apple/Deezer links are mirrored by the node, usually to YouTube.
+  if (/spotify\.com|apple\.com|deezer\.com|tidal\.com/.test(host)) return 'mirror';
+  return host || 'http';
+}
+
+export function pickNode(kazagumo: Kazagumo, nodeName?: string): Node | undefined {
+  const nodes = kazagumo.shoukaku.nodes;
+  const wanted = nodeName ? nodes.get(nodeName) : undefined;
+  if (wanted && wanted.state === Constants.State.CONNECTED) return wanted;
+  return kazagumo.shoukaku.options.nodeResolver(nodes);
+}
+
+type Load = { ok: true; res: LavalinkResponse | undefined } | { ok: false; error: string };
+
+async function load(node: Node, identifier: string, key: string): Promise<Load> {
+  const run = async (): Promise<Load> => {
+    const res = await node.rest.resolve(identifier).catch((e: Error) => ({ loadType: LoadType.ERROR, data: { message: e.message } }) as LavalinkResponse);
+    if (!res) return { ok: false, error: 'no response from node' };
+    if (res.loadType === LoadType.ERROR) return { ok: false, error: (res.data as { message?: string })?.message || 'load error' };
+    return { ok: true, res };
+  };
+  try {
+    return key === 'youtube' ? await youtubeGate.run(run, musicConfig().youtubeQueueTimeoutMs) : await run();
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+function report(key: string, r: Load) {
+  if (r.ok) return breakerSuccess(key);
+  if (!TRACK_SPECIFIC.test(r.error)) breakerFailure(key, r.error);
+}
+
+function tracksOf(res: LavalinkResponse | undefined): { type: KazagumoSearchResult['type']; playlistName?: string; tracks: Track[] } {
+  switch (res?.loadType) {
+    case LoadType.TRACK: return { type: 'TRACK', tracks: [res.data] };
+    case LoadType.PLAYLIST: return { type: 'PLAYLIST', playlistName: res.data.info.name, tracks: res.data.tracks };
+    case LoadType.SEARCH: return { type: 'SEARCH', tracks: res.data };
+    default: return { type: 'SEARCH', tracks: [] };
+  }
+}
+
+function matches(queryNorm: string, t: Track) {
+  const tokens = queryNorm.split(' ').filter(Boolean);
+  if (!tokens.length) return true;
+  const hay = normalizeQuery(`${t.info.title} ${t.info.author}`);
+  const hit = tokens.filter(tok => hay.includes(tok)).length;
+  return hit / tokens.length >= musicConfig().matchRatio;
+}
+
+function acceptable(t: Track, strict: boolean, queryNorm: string) {
+  if (!t.info.isStream && t.info.length > 0 && t.info.length < musicConfig().minTrackMs) return false;
+  return !strict || matches(queryNorm, t);
+}
+
+// Same as kazagumo.search(): the player attaches the Kazagumo instance when the track is queued.
+const wrap = (_kazagumo: Kazagumo, raw: Track[], requester: unknown) =>
+  raw.map(t => new KazagumoTrack(t, requester));
+
+const empty = (notice?: MusicNotice): MusicSearchResult => ({ type: 'SEARCH', tracks: [], notice });
+
+// YouTube oEmbed is a cheap public endpoint. We only need the title to search elsewhere when YouTube is blocked.
+async function youtubeTitle(url: string) {
+  try {
+    const r = await fetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return null;
+    const j = await r.json() as { title?: string; author_name?: string };
+    return j.title ? `${j.title} ${j.author_name?.replace(/ - Topic$/, '') ?? ''}`.trim() : null;
+  } catch { return null; }
+}
+
+async function fromCache(kazagumo: Kazagumo, node: Node, queryNorm: string, requester: unknown, exclude: string[]): Promise<MusicSearchResult | null> {
+  const row = cacheGet(queryNorm);
+  if (!row) return null;
+  const key = sourceKeyOf(row.source);
+  if (exclude.includes(key) || !sourceEnabled(row.source) && SOURCES[row.source]) return null;
+  if (row.raw_json && row.node === node.name) {
+    return { type: 'TRACK', tracks: wrap(kazagumo, [JSON.parse(row.raw_json)], requester), fromCache: true };
+  }
+  if (!row.uri || !breakerAllow(key)) return null;
+  const r = await load(node, row.uri, key);
+  report(key, r);
+  const got = r.ok ? tracksOf(r.res).tracks[0] : undefined;
+  if (!got) { cacheDropUri(row.uri); return null; }
+  cachePut(queryNorm, row.source, node.name, got);
+  return { type: 'TRACK', tracks: wrap(kazagumo, [got], requester), fromCache: true };
+}
+
+async function searchSources(kazagumo: Kazagumo, node: Node, queryNorm: string, order: string[], strictAllowed: boolean,
+  requester: unknown, exclude: string[]): Promise<MusicSearchResult> {
+  let notice: MusicNotice | undefined;
+  for (const id of order) {
+    const def = SOURCES[id];
+    if (!def || !sourceEnabled(id) || exclude.includes(def.key)) continue;
+    if (negativeHas(queryNorm, id)) continue;
+    if (!breakerAllow(def.key)) {
+      if (def.key === 'youtube') notice = 'youtube_unavailable';
+      continue;
+    }
+    const r = await load(node, `${def.prefix}${queryNorm}`, def.key);
+    report(def.key, r);
+    if (!r.ok) {
+      console.warn(head, `${chalk.bold(id)} failed for "${queryNorm}":`, r.error);
+      if (def.key === 'youtube') notice = 'youtube_unavailable';
+      continue;
+    }
+    const found = tracksOf(r.res).tracks;
+    const strict = strictAllowed && def.strict;
+    const best = found.find(t => acceptable(t, strict, queryNorm));
+    if (!best) {
+      negativePut(queryNorm, id, musicConfig().negativeTtlMs);
+      continue;
+    }
+    cachePut(queryNorm, id, node.name, best);
+    const rest = found.filter(t => t !== best);
+    return { type: 'SEARCH', tracks: wrap(kazagumo, [best, ...rest], requester) };
+  }
+  return empty(notice);
+}
+
+const autocompleteMemo = new Map<string, { at: number; tracks: Track[] }>();
+
+async function autocomplete(kazagumo: Kazagumo, node: Node, query: string, opts: MusicSearchOptions): Promise<MusicSearchResult> {
+  const queryNorm = normalizeQuery(query);
+  if (queryNorm.length < 2) return empty();
+  const local = cacheSearchTitles(queryNorm, 5).flatMap(r => r.raw_json ? [JSON.parse(r.raw_json) as Track] : []);
+  const memo = autocompleteMemo.get(queryNorm);
+  let remote: Track[] = memo && Date.now() - memo.at < 10 * 60_000 ? memo.tracks : [];
+  if (!memo && userAllow(opts.userId, 'autocomplete')) {
+    const res = await searchSources(kazagumo, node, queryNorm, musicConfig().autocompleteOrder, false, opts.requester, opts.exclude || []);
+    remote = res.tracks.map(t => t.getRaw()._raw as Track);
+    autocompleteMemo.set(queryNorm, { at: Date.now(), tracks: remote });
+    if (autocompleteMemo.size > 2000) autocompleteMemo.delete(autocompleteMemo.keys().next().value!);
+  }
+  const seen = new Set<string>();
+  const all = [...local, ...remote].filter(t => {
+    const k = t.info.uri || t.info.identifier;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+  return { type: 'SEARCH', tracks: wrap(kazagumo, all.slice(0, 10), opts.requester) };
+}
+
+// Drop-in replacement for kazagumo.search(): cache, source order, breaker, limits.
+export async function musicSearch(kazagumo: Kazagumo, query: string, opts: MusicSearchOptions = {}): Promise<MusicSearchResult> {
+  const node = pickNode(kazagumo, opts.nodeName);
+  if (!node) throw new Error('No node is available');
+  if (opts.kind === 'autocomplete') return autocomplete(kazagumo, node, query, opts);
+
+  const exclude = opts.exclude || [];
+  const queryNorm = normalizeQuery(query);
+  if (!queryNorm) return empty();
+
+  const cached = await fromCache(kazagumo, node, queryNorm, opts.requester, exclude);
+  if (cached) return cached;
+
+  if (!userAllow(opts.userId, 'play')) return empty('rate_limited');
+
+  if (/^https?:\/\//i.test(queryNorm)) {
+    const key = urlSourceKey(queryNorm);
+    if (!exclude.includes(key) && breakerAllow(key) && !(key === 'youtube' && !sourceEnabled('youtube'))) {
+      const r = await load(node, queryNorm, key);
+      report(key, r);
+      if (r.ok) {
+        const res = tracksOf(r.res);
+        if (res.type === 'TRACK' && res.tracks[0]) cachePut(queryNorm, res.tracks[0].info.sourceName, node.name, res.tracks[0]);
+        return { ...res, tracks: wrap(kazagumo, res.tracks, opts.requester) };
+      }
+      console.warn(head, `URL load failed (${key}):`, r.error);
+    }
+    if (key !== 'youtube') return empty();
+    // YouTube link while YouTube is down: find the same song elsewhere by title.
+    const title = await youtubeTitle(queryNorm);
+    if (!title) return empty('youtube_unavailable');
+    const alt = await searchSources(kazagumo, node, normalizeQuery(title), musicConfig().order, true, opts.requester, [...exclude, 'youtube']);
+    return { ...alt, notice: 'youtube_unavailable' };
+  }
+
+  return searchSources(kazagumo, node, queryNorm, musicConfig().order, true, opts.requester, exclude);
+}
+
+// A track failed during playback. Forget it and look for the same song on another source.
+export async function findAlternative(kazagumo: Kazagumo, track: KazagumoTrack, nodeName?: string) {
+  if (track.uri) cacheDropUri(track.uri);
+  const key = sourceKeyOf(track.sourceName);
+  const q = `${track.title} ${track.author?.replace(/ - Topic$/, '') ?? ''}`;
+  const res = await musicSearch(kazagumo, q, { requester: track.requester, nodeName, exclude: [key] }).catch(() => null);
+  return res?.tracks[0] ?? null;
+}
+
+export function recordPlayback(sourceName: string | undefined, error?: string) {
+  const key = sourceKeyOf(sourceName);
+  if (!error) return breakerSuccess(key);
+  if (!TRACK_SPECIFIC.test(error)) breakerFailure(key, error);
+}
+
+const NOTICE_TEXT: Record<MusicNotice, { th: string; en: string }> = {
+  youtube_unavailable: { th: 'YouTube ใช้ไม่ได้ตอนนี้ ใช้แหล่งอื่นแทน', en: 'YouTube is unavailable right now, using other sources.' },
+  rate_limited: { th: 'ค้นหาถี่เกินไป รอสักครู่แล้วลองใหม่', en: 'Too many searches, please wait a moment.' },
+};
+
+export function noticeText(notice: MusicNotice | undefined, locale?: string) {
+  if (!notice) return '';
+  return locale === 'th' ? NOTICE_TEXT[notice].th : NOTICE_TEXT[notice].en;
+}

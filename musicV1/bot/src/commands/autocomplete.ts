@@ -4,6 +4,7 @@ import { formatTime } from "../utils/messages.js";
 import { Kazagumo } from "kazagumo";
 import Env from "../utils/env.js";
 import { InteractionElements } from "../utils/interactionElements.js";
+import { musicSearch } from "../music/resolver.js";
 type Locale = 'id' | 'da' | 'de' | 'en-GB' | 'en-US' | 'es-ES' | 'es-419' | 'fr' | 'hr' | 'it' | 'lt' | 'hu' | 'nl' | 'no' | 'pl' | 'pt-BR' | 'ro' | 'fi' | 'sv-SE' | 'vi' | 'tr' | 'cs' | 'el' | 'bg' | 'ru' | 'uk' | 'hi' | 'th' | 'zh-CN' | 'ja' | 'zh-TW' | 'ko';
 
 export class Autocomplete {
@@ -34,7 +35,7 @@ if(interaction.guild){
         const source = interaction.options.get('source', false);
         if (!query) return interaction.respond([]);
 
-        const Yresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'youtube');
+        const Yresults = (await musicSearch(kazagumo, query, { requester: member, userId: member.id, kind: 'autocomplete' })).tracks;
         // const Sresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'spotify');
         // const tracks = [...Yresults.slice(0, 10), ...Sresults.slice(0, 10)];
         const tracks = Yresults.slice(0, 10);
@@ -63,7 +64,7 @@ if(interaction.guild){
           if(focus.name == 'search'){
             if(!focus.value)return interaction.respond([]);
 
-            const Yresults = (await kazagumo.search(focus.value.toString(), { requester: member })).tracks.filter(t=>t.sourceName == 'youtube');
+            const Yresults = (await musicSearch(kazagumo, focus.value.toString(), { requester: member, userId: member.id, kind: 'autocomplete' })).tracks;
             // const Sresults = (await kazagumo.search(query, { requester: member })).tracks.filter(t=>t.sourceName == 'spotify');
             // const tracks = [...Yresults.slice(0, 10), ...Sresults.slice(0, 10)];
             const tracks = Yresults.slice(0, 10);

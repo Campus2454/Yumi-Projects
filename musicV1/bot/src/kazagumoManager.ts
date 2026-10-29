@@ -1,5 +1,6 @@
 import { Client } from "discord.js";
-import { Connectors, NodeOption } from "shoukaku";
+import { Connectors, Constants, NodeOption } from "shoukaku";
+import { findAlternative, recordPlayback } from "./music/resolver.js";
 import Env from "./utils/env.js";
 import chalk from "chalk";
 import { Kazagumo, Plugins } from "kazagumo";
@@ -34,13 +35,22 @@ export default class KazagumoManager {
       //   auth: Env('LAVALINK_PASS_SG') || 'youshallnotpass',
       //   secure: Env('LAVALINK_SECURE_SG')?.toLowerCase() == 'true',
       // },
+      ...(Env('NODELINK_HOST') ? [{
+        name: 'NODELINK',
+        url: Env('NODELINK_HOST') || '',
+        auth: Env('NODELINK_PASS') || 'youshallnotpass',
+        secure: Env('NODELINK_SECURE')?.toLowerCase() == 'true',
+      }] : []),
       {
-        name: 'TEST',
+        name: 'LAVALINK',
         url: Env('LAVALINK_HOST') || '',
         auth: Env('LAVALINK_PASS') || 'youshallnotpass',
         secure: Env('LAVALINK_SECURE')?.toLowerCase() == 'true',
       },
     ];
+    // First connected node in this list wins. Swap to "LAVALINK,NODELINK" if NodeLink misbehaves.
+    const priority = (Env('MUSIC_NODE_PRIORITY') || 'NODELINK,LAVALINK').split(',').map(s => s.trim());
+    const rank = (name: string) => { const i = priority.indexOf(name); return i < 0 ? priority.length : i; };
     const kazagumo = new Kazagumo({
       defaultSearchEngine: "youtube_music",
       send: (guildId, payload)=>{
@@ -48,7 +58,16 @@ export default class KazagumoManager {
           if(guild)guild.shard.send(payload);
       },
       plugins: [new Plugins.PlayerMoved(client)]
-    }, new Connectors.DiscordJS(client), Nodes, { moveOnDisconnect: true });
+    }, new Connectors.DiscordJS(client), Nodes, {
+      moveOnDisconnect: true,
+      reconnectTries: 10,
+      reconnectInterval: 5,
+      restTimeout: 20,
+      nodeResolver: (nodes) => [...nodes.values()]
+        .filter(n => n.state === Constants.State.CONNECTED)
+        .sort((a, b) => rank(a.name) - rank(b.name) || a.penalties - b.penalties)
+        .shift(),
+    });
     kazagumo.nodes = Nodes;
 
     kazagumo.shoukaku.on('ready', (name) => console.log(headS, `Node ${chalk.bold(name)} is ready!`));
@@ -65,13 +84,40 @@ export default class KazagumoManager {
       savePlayers(kazagumo);
  });kazagumo.on('playerStart', async(p, t)=>{
       console.log(headK, `Player was started: ${chalk.bold(p.guildId)}`);
+      recordPlayback(t.sourceName);
       await sendPStatus(client, kazagumo, p, { from: 'playerStart event' });
       savePlayers(kazagumo);
  });kazagumo.on('playerEnd', async(p)=>{
       console.log(headK, `Player was ended: ${chalk.bold(p.guildId)}`);
       await sendPStatus(client, kazagumo, p, { from: 'playerEnd event' });
-      if(p[247] !== true && p.queue.isEmpty && !p.queue.current && p.loop == 'none'){await p.destroy()};
+      if(!p.recovering && p[247] !== true && p.queue.isEmpty && !p.queue.current && p.loop == 'none'){await p.destroy()};
       savePlayers(kazagumo);
+ });kazagumo.on('playerException', async(p, data)=>{
+      const track = p.queue.current;
+      const error = (data as { exception?: { message?: string } })?.exception?.message || 'unknown';
+      console.error(headKE, `Track failed in ${chalk.bold(p.guildId)}: ${track?.title} (${track?.sourceName}):`, error);
+      if(!track)return;
+      recordPlayback(track.sourceName, error);
+      // One retry per song, on a different source.
+      if((track as { altRetry?: boolean }).altRetry)return;
+      p.recovering = true;
+      try{
+        const alt = await findAlternative(kazagumo, track, p.shoukaku.node.name);
+        if(alt){
+          (alt as { altRetry?: boolean }).altRetry = true;
+          console.log(headK, `Fallback for ${chalk.bold(track.title)}: ${alt.title} (${alt.sourceName})`);
+          p.queue.unshift(alt);
+          if(!p.playing && !p.queue.current)await p.play();
+        }
+      }catch(err){
+        console.error(headKE, 'Fallback error:', err);
+      }finally{
+        p.recovering = false;
+      };
+ });kazagumo.on('playerStuck', async(p)=>{
+      console.warn(headKE, `Track stuck in ${chalk.bold(p.guildId)}: ${p.queue.current?.title}`);
+      recordPlayback(p.queue.current?.sourceName, 'track stuck');
+      p.skip();
  });kazagumo.on('playerUpdate', async(p, data)=>{
       console.log(headK, `Player was updated: ${chalk.bold(p.guildId)}`);
       const player = kazagumo.players.get(p.guildId);

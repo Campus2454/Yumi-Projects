@@ -87,6 +87,7 @@ declare module 'discord.js' {
     latestUpdate: number;
     showInfo: boolean;
     247: boolean;
+    recovering?: boolean;
   }
   interface KazagumoEvents {
     debug: [message: string];

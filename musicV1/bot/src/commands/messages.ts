@@ -4,6 +4,7 @@ import { waitForDebugger } from "inspector";
 import { Kazagumo, KazagumoTrack } from "kazagumo";
 import { setTimeout as wait } from "timers/promises";
 import { sendPStatus } from "../utils/messages.js";
+import { musicSearch, noticeText } from "../music/resolver.js";
 
 export default class Messages {
 
@@ -34,9 +35,9 @@ export default class Messages {
     });
 
     // หาเพลง
-    const result = await kazagumo.search(query, { requester: message.author });
+    const result = await musicSearch(kazagumo, query, { requester: message.author, userId: message.author.id, nodeName: player.shoukaku.node.name });
     if (!result.tracks.length) {
-      return message.reply("😢 ไม่เจอเพลงที่หา");
+      return message.reply(noticeText(result.notice, 'th') || "😢 ไม่เจอเพลงที่หา");
     }
 
     // เพิ่มเพลงเข้า queue

@@ -11,6 +11,7 @@ import { createCanvas, loadImage } from "canvas";
 import { isDev, isM } from "./env.js";
 import { Player } from "shoukaku";
 import { User } from "discord.js";
+import { musicSearch } from "../music/resolver.js";
 
 const SAVE_FILE = path.join(process.cwd(), `players_${isDev ? 'dev' : isM ? 'music' : 'main'}.json`);
 
@@ -84,7 +85,7 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
 
       // ใส่เพลงที่กำลังเล่นก่อน
       if (data.current) {
-        const res = await kazagumo.search(data.current);
+        const res = await musicSearch(kazagumo, data.current, { nodeName: player.shoukaku.node.name });
         if (res.tracks.length) {
           player.queue.add(res.tracks[0]);
         }
@@ -92,7 +93,7 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
 
       // แล้วค่อยใส่ queue
       for (const url of data.queue) {
-        const res = await kazagumo.search(url);
+        const res = await musicSearch(kazagumo, url, { nodeName: player.shoukaku.node.name });
         if (res.tracks.length) {
           player.queue.add(res.tracks[0]);
         }

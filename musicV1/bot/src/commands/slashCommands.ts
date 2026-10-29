@@ -6,6 +6,7 @@ import { setTimeout as wait } from "timers/promises";
 import Env from "../utils/env.js";
 import { clockToMs } from "global/common-functions";
 import { InteractionElements } from "../utils/interactionElements.js";
+import { musicSearch, noticeText } from "../music/resolver.js";
 type Locale = 'id' | 'da' | 'de' | 'en-GB' | 'en-US' | 'es-ES' | 'es-419' | 'fr' | 'hr' | 'it' | 'lt' | 'hu' | 'nl' | 'no' | 'pl' | 'pt-BR' | 'ro' | 'fi' | 'sv-SE' | 'vi' | 'tr' | 'cs' | 'el' | 'bg' | 'ru' | 'uk' | 'hi' | 'th' | 'zh-CN' | 'ja' | 'zh-TW' | 'ko';
 
 export class SlashCommands {
@@ -57,9 +58,10 @@ if(interaction.guild){
           textId: interaction.channel?.id,
         });
 
-        const result = await kazagumo.search(query, { requester: member.user });
+        const result = await musicSearch(kazagumo, query, { requester: member.user, userId: member.id, nodeName: player.shoukaku.node.name });
+        const notice = noticeText(result.notice, interaction.locale);
         if (!result.tracks.length) {
-          return interaction.editReply({ content: iE.song_not_found_message[interaction.locale] });
+          return interaction.editReply({ content: notice || iE.song_not_found_message[interaction.locale] });
         }
 
         console.debug({playing: player.playing, paused: player.paused});
@@ -77,7 +79,7 @@ if(interaction.guild){
           : await interaction.channel.send({ components: [new TextDisplayBuilder().setContent(text)], flags: MessageFlags.IsComponentsV2 });
         // const m = await interaction.reply({ components: [new TextDisplayBuilder().setContent(text)], flags: MessageFlags.IsComponentsV2 });
         player.messageId = m?.id;
-        interaction.editReply({ content: iE.song_added_message[interaction.locale](result.tracks[0].title, m.url) });
+        interaction.editReply({ content: [notice, iE.song_added_message[interaction.locale](result.tracks[0].title, m.url)].filter(Boolean).join('\n') });
 
         await wait(300);
         await sendPStatus(client, kazagumo, player);

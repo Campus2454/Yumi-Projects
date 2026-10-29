@@ -1,0 +1,3 @@
+bot/music_cache_*.db*
+bot/music-sources.json
+sidecar/sidecar-state.json
