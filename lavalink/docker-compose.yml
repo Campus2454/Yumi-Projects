@@ -46,4 +46,4 @@ services:
     environment:
       - OVERRIDE_PLAYER_VARIANT=IAS
     ports:
-      - "127.0.0.1:${YT_CIPHER_PORT:-8002}:8001"
+      - "127.0.0.1:${YT_CIPHER_PORT:-8012}:8001"

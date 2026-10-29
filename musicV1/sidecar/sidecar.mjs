@@ -33,9 +33,11 @@ const PROBES = [
   { source: 'soundcloud', id: env('SIDECAR_SC_PROBE', 'scsearch:lofi') },
 ];
 
+// SIDECAR_NODELINK_HOST etc. win over the bot's NODELINK_HOST, so the sidecar can watch other nodes than prod uses.
+const nodeEnv = k => env(`SIDECAR_${k}`) || env(k);
 const NODES = [
-  { name: 'NODELINK', kind: 'nodelink', host: env('NODELINK_HOST'), pass: env('NODELINK_PASS'), secure: env('NODELINK_SECURE') === 'true' },
-  { name: 'LAVALINK', kind: 'lavalink', host: env('LAVALINK_HOST'), pass: env('LAVALINK_PASS'), secure: env('LAVALINK_SECURE') === 'true' },
+  { name: 'NODELINK', kind: 'nodelink', host: nodeEnv('NODELINK_HOST'), pass: nodeEnv('NODELINK_PASS'), secure: nodeEnv('NODELINK_SECURE') === 'true' },
+  { name: 'LAVALINK', kind: 'lavalink', host: nodeEnv('LAVALINK_HOST'), pass: nodeEnv('LAVALINK_PASS'), secure: nodeEnv('LAVALINK_SECURE') === 'true' },
 ].filter(n => n.host);
 
 function loadEnvFile(file) {

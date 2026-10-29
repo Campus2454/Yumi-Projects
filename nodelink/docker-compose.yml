@@ -51,6 +51,9 @@ services:
       NODELINK_NETWORK_ROUTEPLANNER_STRATEGY: ${ROUTEPLANNER_STRATEGY:-RotateOnBan}
       NODELINK_NETWORK_ROUTEPLANNER_IPBLOCKS: ${ROUTEPLANNER_IPBLOCKS:-[]}
 
+      # Raw PCM / stream-url endpoints. Used by sidecar to test real playback, not just search.
+      NODELINK_API_ENABLELOADSTREAMENDPOINT: "true"
+      NODELINK_API_ENABLETRACKSTREAMENDPOINT: "true"
       NODELINK_API_METRICS_ENABLED: "true"
       NODELINK_API_METRICS_AUTHORIZATION_PASSWORD: ${NODELINK_PASSWORD}
     # For IPv6 rotation uncomment, remove `ports`, and set NODELINK_PORT in the bot instead.
@@ -74,4 +77,4 @@ services:
     # Bound to loopback only, so no API_TOKEN needed. NodeLink reaches it by service name
     # (bridge network) or 127.0.0.1 (host network).
     ports:
-      - "127.0.0.1:${YT_CIPHER_PORT:-8001}:8001"
+      - "127.0.0.1:${YT_CIPHER_PORT:-8011}:8001"
