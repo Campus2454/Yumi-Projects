@@ -88,13 +88,16 @@ function gate(req: any, res: any): { token: string; s: Session } | null {
 }
 
 function sendPage(res: any, status: number, html: string) {
+	// สคริปต์ของหน้าต่างตั้งค่าใช้ nonce เฉพาะคำขอนี้ สคริปต์อื่นยังถูกบล็อก
+	const nonce = crypto.randomBytes(16).toString('base64');
+	html = html.split('<script>').join(`<script nonce="${nonce}">`);
 	res.status(status).set({
 		'Content-Type': 'text/html; charset=utf-8',
 		'Cache-Control': 'no-store',
 		'X-Frame-Options': 'DENY',
 		'X-Content-Type-Options': 'nosniff',
 		'Referrer-Policy': 'no-referrer',
-		'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+		'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${nonce}'; connect-src 'self'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src https: data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'`,
 	}).send(html);
 }
 
@@ -226,7 +229,7 @@ button:disabled{opacity:.4;cursor:not-allowed;filter:none}
 `;
 
 const page = (title: string, body: string) => `<!doctype html>
-<html lang="${prefs().lang}"><head>
+<html lang="${prefs().lang}"${prefs().calm ? ' class="calm"' : ''}><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title>
 <link rel="icon" href="${LOGO}">
@@ -236,7 +239,7 @@ const page = (title: string, body: string) => `<!doctype html>
 .gear svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .gear-fixed{position:fixed;top:16px;right:16px;z-index:5}</style>
 ${firstVisitScript()}</head>
-<body${prefs().calm ? ' class="calm"' : ''}>${body}
+<body>${body}
 ${settingsModal(prefs().sub ?? null)}
 <script>${settingsScript()}</script></body></html>`;
 

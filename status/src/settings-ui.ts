@@ -49,8 +49,23 @@ export const SET_CSS = `
 .setm .foot2{margin-top:20px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .setm .save{padding:12px 26px;border-radius:13px;border:0;color:#fff;font:inherit;font-weight:600;cursor:pointer;background:linear-gradient(180deg,#ff5a4d,var(--brand,#f13b3b));box-shadow:0 10px 26px -10px rgba(241,59,59,.8)}
 .setm .x{position:absolute;top:14px;right:14px;width:36px;height:36px;display:grid;place-items:center;border-radius:12px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.05);color:inherit;cursor:pointer}
+.setm .x,.setm .opt,.setm .sw{box-shadow:none;min-height:0}.setm .x{padding:0}
 .setm .x svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round}
 .setm .empty2{padding:10px;color:var(--dim,#8a706d);font-size:.9rem}
+/* แถบเลื่อนแบบบาง กลมกลืนกับธีม (ทุกหน้า) */
+html{scrollbar-color:rgba(255,255,255,.18) transparent}
+.setm .box,.setm .opts{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.2) transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:99px;border:3px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background-color:rgba(241,59,59,.55)}
+::-webkit-scrollbar-button{display:none}
+.setm .box{scrollbar-gutter:stable}
+.setm .opts{margin-right:-4px;padding-right:6px}
+.setm .foot2 .note{font-size:.8rem;color:var(--dim,#8a706d);font-weight:300}
+.setm .link{border:0;background:none;padding:0;color:var(--muted,#b99a97);font:inherit;font-size:.85rem;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.setm .link:hover{color:var(--ink,#fff3f1)}
+.setm.busy .box{opacity:.6;pointer-events:none}
 html.calm *,html.calm *::before,html.calm *::after{animation:none!important;transition:none!important}
 `;
 
@@ -71,7 +86,7 @@ export function settingsModal(sub: SubInfo = null): string {
 	const mail = sub
 		? `<div class="mail">${esc(t('set_email_on', { email: maskEmail(sub.email) }))}<small>${esc(t('set_email_note'))}</small>
 			<div class="act"><button type="button" class="ghost" data-unsub>${esc(t('set_unsub'))}</button></div><p class="msg" id="setmsg" role="status"></p></div>`
-		: `<div class="mail">${esc(t('set_email_none'))}<div class="act"><button type="button" class="ghost" data-sub-open data-set-close>${esc(t('link_subscribe'))}</button></div></div>`;
+		: `<div class="mail">${esc(t('set_email_none'))}<div class="act"><a class="ghost" href="/?subscribe=1" data-sub-open data-set-close style="text-decoration:none">${esc(t('link_subscribe'))}</a></div></div>`;
 	return `
 <div class="setm" id="setm" aria-hidden="true">
 	<div class="box" role="dialog" aria-modal="true" aria-labelledby="sett">
@@ -90,7 +105,7 @@ export function settingsModal(sub: SubInfo = null): string {
 			<div class="row2"><div>${esc(t('set_refresh'))}<small>${esc(t('set_refresh_note'))}</small></div>${sw('refresh', p.refresh)}</div>
 			<div class="row2"><div>${esc(t('set_calm'))}</div>${sw('calm', p.calm)}</div></div>
 		<div class="sec"><span class="lb">${esc(t('set_email'))}</span>${mail}</div>
-		<div class="foot2"><button type="button" class="ghost" data-reset>${esc(t('set_reset'))}</button><button type="button" class="save" data-save>${esc(t('set_save'))}</button></div>
+		<div class="foot2"><span class="note">${esc(t('set_auto_saved'))}</span><button type="button" class="link" data-reset>${esc(t('set_reset'))}</button></div>
 	</div>
 </div>`;
 }
@@ -105,7 +120,7 @@ for(var i=0;i<n.length;i++){var b=String(n[i]).toLowerCase().split('-')[0];if(L.
 var tz=Intl.DateTimeFormat().resolvedOptions().timeZone||'Asia/Bangkok',y='; path=/; max-age=31536000; samesite=lax';
 if(!/(?:^|; )ys_lang=/.test(document.cookie))document.cookie='ys_lang='+lang+y;
 document.cookie='ys_tz='+encodeURIComponent(tz)+y;
-if(!sessionStorage.getItem('ys_init')){sessionStorage.setItem('ys_init','1');location.reload();}
+if(!sessionStorage.getItem('ys_init')){sessionStorage.setItem('ys_init','1');window.__ysReload=1;location.reload();}
 }catch(e){}})();</script>`;
 }
 
@@ -114,27 +129,35 @@ export function settingsScript(): string {
 	const s = JSON.stringify(tMany(['set_tz_auto', 'set_no_match', 'set_unsub_done', 'sub_error']));
 	return `(function(){
 var m=document.getElementById('setm');if(!m)return;
-var S=${s},st={lang:null,tz:null,h12:null,refresh:null,calm:null},last=null;
+var S=${s},last=null,box=m.querySelector('.box');
 var y='; path=/; max-age=31536000; samesite=lax';
 function ck(k){var r=document.cookie.match(new RegExp('(?:^|; )'+k+'=([^;]*)'));return r?decodeURIComponent(r[1]):null;}
-function open(){last=document.activeElement;m.classList.add('open');m.setAttribute('aria-hidden','false');renderTz('');}
+function open(){last=document.activeElement;m.classList.add('open');m.setAttribute('aria-hidden','false');renderTz(tzq.value);}
 function close(){m.classList.remove('open');m.setAttribute('aria-hidden','true');if(last&&last.focus)last.focus();}
 document.addEventListener('click',function(e){var t=e.target;if(!t||!t.closest)return;
 	if(t.closest('[data-set-open]')){e.preventDefault();open();return;}
 	if(t===m||t.closest('[data-set-close]'))close();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open'))close();});
+/* เปลี่ยนแล้วมีผลทันที: เขียน cookie แล้วโหลดหน้าใหม่ และเปิดหน้าต่างนี้ค้างไว้ที่ตำแหน่งเดิม */
+function apply(k,v,mail){
+	document.cookie=k+'='+encodeURIComponent(v)+y;
+	m.classList.add('busy');
+	try{sessionStorage.setItem('ys_reopen',JSON.stringify({b:box.scrollTop,l:langs.scrollTop,t:tzs.scrollTop}));}catch(e){}
+	var go=function(){location.reload();};
+	if(!mail)return go();
+	fetch('/api/subscription/prefs',{method:'POST',headers:{'Content-Type':'application/json'},
+		body:JSON.stringify({lang:ck('ys_lang'),tz:ck('ys_tz'),h12:ck('ys_h12')})}).catch(function(){}).then(go);}
 /* ภาษา */
 var lq=document.getElementById('langq'),langs=document.getElementById('langs');
-lq.addEventListener('input',function(){var q=lq.value.trim().toLowerCase(),b=langs.querySelectorAll('.opt'),n=0;
-	for(var i=0;i<b.length;i++){var ok=!q||b[i].getAttribute('data-q').indexOf(q)>=0;b[i].style.display=ok?'':'none';if(ok)n++;}});
-langs.addEventListener('click',function(e){var b=e.target.closest('[data-lang]');if(!b)return;
-	var all=langs.querySelectorAll('.opt');for(var i=0;i<all.length;i++)all[i].classList.remove('on');b.classList.add('on');st.lang=b.getAttribute('data-lang');});
+lq.addEventListener('input',function(){var q=lq.value.trim().toLowerCase(),b=langs.querySelectorAll('.opt');
+	for(var i=0;i<b.length;i++)b[i].style.display=!q||b[i].getAttribute('data-q').indexOf(q)>=0?'':'none';});
+langs.addEventListener('click',function(e){var b=e.target.closest('[data-lang]');if(!b||b.classList.contains('on'))return;apply('ys_lang',b.getAttribute('data-lang'),true);});
 /* เขตเวลา */
 var tzq=document.getElementById('tzq'),tzs=document.getElementById('tzs'),dev=Intl.DateTimeFormat().resolvedOptions().timeZone||'Asia/Bangkok';
 var cur=tzs.getAttribute('data-cur'),zones=[];
 try{zones=Intl.supportedValuesOf('timeZone');}catch(e){zones=[cur,dev,'UTC'];}
 function off(z){try{return new Intl.DateTimeFormat('en-US',{timeZone:z,timeZoneName:'shortOffset'}).formatToParts(new Date()).filter(function(p){return p.type==='timeZoneName';})[0].value;}catch(e){return '';}}
-function item(z,label,sub){var on=(st.tz||cur)===z;return '<button type="button" class="opt'+(on?' on':'')+'" data-tz="'+z+'"><span>'+label+'<small>'+sub+'</small></span></button>';}
+function item(z,label,sub){return '<button type="button" class="opt'+(cur===z?' on':'')+'" data-tz="'+z+'"><span>'+label+'<small>'+sub+'</small></span></button>';}
 function renderTz(q){q=q.trim().toLowerCase();var h='';
 	if(!q)h+=item(dev,S.set_tz_auto,dev.replace(/_/g,' ')+' ('+off(dev)+')');
 	var list=zones.filter(function(z){return !q||z.toLowerCase().replace(/_/g,' ').indexOf(q)>=0;});
@@ -142,25 +165,22 @@ function renderTz(q){q=q.trim().toLowerCase();var h='';
 	list.slice(0,60).forEach(function(z){h+=item(z,z.replace(/_/g,' '),off(z));});
 	tzs.innerHTML=h||'<div class="empty2">'+S.set_no_match+'</div>';}
 tzq.addEventListener('input',function(){renderTz(tzq.value);});
-tzs.addEventListener('click',function(e){var b=e.target.closest('[data-tz]');if(!b)return;st.tz=b.getAttribute('data-tz');renderTz(tzq.value);});
+tzs.addEventListener('click',function(e){var b=e.target.closest('[data-tz]');if(!b||b.getAttribute('data-tz')===cur)return;apply('ys_tz',b.getAttribute('data-tz'),true);});
 /* รูปแบบเวลา และสวิตช์ */
-document.getElementById('clock').addEventListener('click',function(e){var b=e.target.closest('[data-h12]');if(!b)return;
-	var all=this.querySelectorAll('button');for(var i=0;i<all.length;i++)all[i].classList.remove('on');b.classList.add('on');st.h12=b.getAttribute('data-h12');});
-m.addEventListener('click',function(e){var b=e.target.closest('[data-sw]');if(!b)return;var on=!b.classList.contains('on');
-	b.classList.toggle('on',on);b.setAttribute('aria-checked',on);st[b.getAttribute('data-sw')]=on;});
-/* บันทึก / คืนค่า */
-m.querySelector('[data-save]').addEventListener('click',function(){
-	if(st.lang)document.cookie='ys_lang='+st.lang+y;
-	if(st.tz)document.cookie='ys_tz='+encodeURIComponent(st.tz)+y;
-	if(st.h12)document.cookie='ys_h12='+st.h12+y;
-	if(st.refresh!==null)document.cookie='ys_refresh='+(st.refresh?1:0)+y;
-	if(st.calm!==null)document.cookie='ys_calm='+(st.calm?1:0)+y;
-	var body={lang:st.lang||ck('ys_lang'),tz:st.tz||ck('ys_tz'),h12:st.h12||ck('ys_h12')};
-	fetch('/api/subscription/prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).catch(function(){}).then(function(){location.reload();});
-});
+document.getElementById('clock').addEventListener('click',function(e){var b=e.target.closest('[data-h12]');if(!b||b.classList.contains('on'))return;apply('ys_h12',b.getAttribute('data-h12'),true);});
+m.addEventListener('click',function(e){var b=e.target.closest('[data-sw]');if(!b)return;var on=!b.classList.contains('on'),k=b.getAttribute('data-sw');
+	b.classList.toggle('on',on);b.setAttribute('aria-checked',on);
+	if(k==='calm'){document.cookie='ys_calm='+(on?1:0)+y;document.documentElement.classList.toggle('calm',on);}
+	else apply('ys_'+k,on?'1':'0',false);});
+/* คืนค่าตามอุปกรณ์ */
 m.querySelector('[data-reset]').addEventListener('click',function(){
 	['ys_lang','ys_tz','ys_h12','ys_refresh','ys_calm'].forEach(function(k){document.cookie=k+'=; path=/; max-age=0';});
-	try{sessionStorage.removeItem('ys_init');}catch(e){}location.reload();});
+	try{sessionStorage.removeItem('ys_init');sessionStorage.setItem('ys_reopen','{}');}catch(e){}location.reload();});
+/* เปิดค้างไว้หลังโหลดหน้าใหม่ */
+try{var ro=!window.__ysReload&&sessionStorage.getItem('ys_reopen');if(ro){sessionStorage.removeItem('ys_reopen');ro=JSON.parse(ro);
+	m.style.transition='none';box.style.transition='none';open();
+	box.scrollTop=ro.b||0;langs.scrollTop=ro.l||0;tzs.scrollTop=ro.t||0;
+	setTimeout(function(){m.style.transition='';box.style.transition='';},50);}}catch(e){}
 var un=m.querySelector('[data-unsub]');
 if(un)un.addEventListener('click',function(){un.disabled=true;
 	fetch('/api/subscription/unsubscribe',{method:'POST'}).then(function(r){var msg=document.getElementById('setmsg');
