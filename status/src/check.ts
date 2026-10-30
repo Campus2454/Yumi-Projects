@@ -3,7 +3,7 @@ import axios from "axios";
 import mysql from "mysql2/promise";
 import { sendEmailAlert } from "global/backend-functions";
 import https from "https";
-import { refreshMusic } from "./music.js";
+import { reasonText, refreshMusic } from "./music.js";
 
 const mailText = {
 	default: `สถานะการทำงานของ Yumi`,
@@ -153,7 +153,7 @@ async function _music(send2mail: boolean): Promise<StatusData> {
 	if (!m) return { name: 'nodes', status: -1, ping: undefined, uptime: undefined, startTime: undefined, host: undefined, version: undefined, resources: undefined };
 	const up = m.nodes.filter(n => n.up);
 	if (!up.length) {
-		const why = m.nodes.map(n => `${n.name}: ${n.errorTh || n.error || 'ไม่ทราบสาเหตุ'}`).join(', ');
+		const why = m.nodes.map(n => `${n.name}: ${reasonText(n.errorTh)}`).join(', ');
 		return { ...failed('nodes', `node เพลงหยุดทำงานทั้งหมด (${why})`, send2mail) };
 	}
 	active.delete('nodes');

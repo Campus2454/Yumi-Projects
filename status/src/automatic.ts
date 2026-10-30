@@ -3,7 +3,8 @@ import { send } from './send.js';
 import { checkAll as _checkAll, getRateLimits } from './check.js';
 import { recordStatus, getReport, getBrief, getSeries, firstSampleTs, getBanner, getMaintenance, parseRange, initHistory } from './history.js';
 import { renderIndex, renderDetail, renderNotFound } from './pages.js';
-import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSubscribers } from './subscribers.js';
+import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSubscribers, subscriberByToken, updateSubscriberPrefs } from './subscribers.js';
+import { isLang, isTimeZone, parseCookies, prefs, prefsFromRequest, t, withPrefs, type Prefs } from './i18n.js';
 import { renderSubscribePage, renderConfirmResult, renderUnsubResult } from './subscribe-page.js';
 import { renderMetricsPage } from './chart.js';
 import { registerAdmin } from './admin.js';
@@ -70,6 +71,18 @@ function startWatcher() {
 
 app.use(express.json({ limit: '2kb' }));
 
+// การตั้งค่าของผู้ใช้ (ภาษา เขตเวลา ฯลฯ จาก cookie) ใช้ได้ทุกที่ในคำขอนี้ผ่าน i18n.prefs()
+// อุปกรณ์ที่ยืนยันอีเมลแล้วมี cookie ys_sub (httpOnly) ไว้จัดการการรับอีเมลจากหน้าตั้งค่า
+app.use((req: any, res: any, next: () => void) => {
+	(async () => {
+		const p: Prefs = prefsFromRequest(req);
+		const tok = parseCookies(req.headers.cookie).ys_sub;
+		p.sub = tok ? await subscriberByToken(tok).catch(() => null) : null;
+		withPrefs(p, next);
+	})().catch(() => next());
+});
+const SUB_COOKIE = (v: string, maxAge: number) => `ys_sub=${v}; Path=/; Max-Age=${maxAge}; HttpOnly; SameSite=Lax${(process.env.STATUS_PAGE_URL || '').startsWith('https') ? '; Secure' : ''}`;
+
 // rate limit ต่อ IP สำหรับการขอสมัคร (กัน spam และการยิงอีเมลรัว ๆ)
 const hits = new Map<string, number[]>();
 const WINDOW_MS = 10 * 60_000, MAX_HITS = 5;
@@ -121,7 +134,7 @@ app.get('/metrics', wrap(async (req, res) => {
 	const firsts = (await Promise.all(METRIC_SERVICES.map(firstSampleTs))).filter((x): x is number => x !== null);
 	const start = firsts.length ? Math.min(...firsts) : undefined;
 	const entries = await Promise.all(METRIC_SERVICES.map(async n => [n, await getSeries(n, range, Date.now(), start)] as const));
-	res.send(renderMetricsPage(Object.fromEntries(entries), range));
+	res.send(await renderMetricsPage(Object.fromEntries(entries), range));
 }));
 
 // หน้าสำหรับฝังใน iframe: เหมือนหน้าแรกแต่ไม่มีพื้นหลัง และลิงก์รายละเอียดเปิดแท็บใหม่
@@ -145,23 +158,48 @@ app.get('/subscribe', (req: any, res: any) => {
 
 app.post('/api/subscribe', wrap(async (req, res) => {
 	const ip = String(req.headers['x-forwarded-for'] ?? req.socket?.remoteAddress ?? 'unknown').split(',')[0].trim();
-	if (!rateOk(ip)) { res.status(429).json({ ok: false, error: 'ขอบ่อยเกินไป กรุณารอ 10 นาทีแล้วลองใหม่' }); return; }
+	if (!rateOk(ip)) { res.status(429).json({ ok: false, error: t('sub_rate_10') }); return; }
 	const email = normalizeEmail(req.body?.email);
 	const r = await requestSubscribe(email);
-	if (r === 'invalid') { res.status(400).json({ ok: false, error: 'รูปแบบอีเมลไม่ถูกต้อง' }); return; }
+	if (r === 'invalid') { res.status(400).json({ ok: false, error: t('sub_invalid') }); return; }
 	// 'sent' และ 'already' ตอบเหมือนกัน เพื่อไม่ให้รู้ว่าอีเมลนี้มีในระบบหรือไม่
 	res.json({ ok: true });
 }));
 
 app.get('/subscribe/confirm', wrap(async (req, res) => {
 	const r = await confirmSubscribe(req.query.token);
-	res.send(renderConfirmResult(r));
+	if (r.result === 'ok' && r.unsubToken) {
+		// อุปกรณ์ที่กดยืนยันจัดการการรับอีเมลได้จากหน้าตั้งค่า และอีเมลใช้ภาษา/เขตเวลาของอุปกรณ์นี้
+		res.setHeader('Set-Cookie', SUB_COOKIE(r.unsubToken, 365 * 86400));
+		const p = prefs();
+		await updateSubscriberPrefs(r.unsubToken, { lang: p.lang, tz: p.tz, h12: p.h12 });
+	}
+	res.send(await renderConfirmResult(r.result));
 }));
 
 app.all('/subscribe/unsubscribe', wrap(async (req, res) => {
-	const t = (req.method === 'POST' ? req.body?.token ?? req.query.token : req.query.token);
-	const ok = await unsubscribe(t);
-	res.send(renderUnsubResult(ok));
+	const tok = (req.method === 'POST' ? req.body?.token ?? req.query.token : req.query.token);
+	const ok = await unsubscribe(tok);
+	res.send(await renderUnsubResult(ok));
+}));
+
+// หน้าตั้งค่า: บันทึกภาษา/เขตเวลาให้อีเมลของอุปกรณ์นี้ (ถ้ารับอีเมลอยู่)
+app.post('/api/subscription/prefs', wrap(async (req, res) => {
+	const tok = parseCookies(req.headers.cookie).ys_sub;
+	if (!tok) { res.json({ ok: false }); return; }
+	const b = req.body ?? {};
+	const cur = prefs();
+	const lang = isLang(b.lang) ? b.lang : cur.lang;
+	const tz = isTimeZone(b.tz) ? b.tz : cur.tz;
+	const h12 = b.h12 === '12' ? true : b.h12 === '24' ? false : b.h12 === 'auto' ? null : cur.h12;
+	res.json({ ok: await updateSubscriberPrefs(tok, { lang, tz, h12 }) });
+}));
+
+app.post('/api/subscription/unsubscribe', wrap(async (req, res) => {
+	const tok = parseCookies(req.headers.cookie).ys_sub;
+	const ok = tok ? await unsubscribe(tok) : false;
+	res.setHeader('Set-Cookie', SUB_COOKIE('', 0));
+	res.status(ok ? 200 : 400).json({ ok });
 }));
 
 // หน้าผู้ดูแล /admin (ต้องลงทะเบียนก่อน /:name)

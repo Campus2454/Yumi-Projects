@@ -1,3 +1,4 @@
+import { t, tMany } from './i18n.js';
 /** โมดัลรับการแจ้งเตือนทางอีเมล: แสดงเป็น popup ในหน้าแรก (ปิดได้ด้วยปุ่ม X, คลิกนอกกล่อง, หรือกด Esc) */
 
 export const SUB_CSS = `
@@ -26,28 +27,29 @@ export const SUB_CSS = `
 @media (prefers-reduced-motion:reduce){.modal,.modal .box{transition:none!important}}
 `;
 
-export const SUB_MODAL = `
+export const SUB_MODAL = () => `
 <div class="modal" id="subm" aria-hidden="true">
 	<div class="box" role="dialog" aria-modal="true" aria-labelledby="subt">
-		<button class="x" type="button" data-sub-close aria-label="ปิด">
+		<button class="x" type="button" data-sub-close aria-label="${t('close')}">
 			<svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg>
 		</button>
-		<h3 id="subt">รับการแจ้งเตือนสถานะระบบ</h3>
-		<p class="lead">ใส่อีเมลของคุณ เราจะส่งลิงก์ยืนยันให้หนึ่งฉบับ เมื่อยืนยันแล้วจะได้รับแจ้งเตือนเมื่อมีบริการหยุดทำงาน และเมื่อกลับมาทำงานปกติ</p>
+		<h3 id="subt">${t('sub_title')}</h3>
+		<p class="lead">${t('sub_lead')}</p>
 		<form id="subf" novalidate>
-			<label for="subem">อีเมลของคุณ</label>
+			<label for="subem">${t('sub_label')}</label>
 			<input id="subem" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required maxlength="254">
-			<button class="go" type="submit" id="subgo">รับการแจ้งเตือน</button>
+			<button class="go" type="submit" id="subgo">${t('sub_button')}</button>
 			<p class="msg" id="submsg" role="status" aria-live="polite"></p>
 		</form>
-		<div class="fine">ยกเลิกได้ทุกเมื่อ เราจะไม่ส่งอีเมลอื่นนอกจากการแจ้งเตือนสถานะ</div>
+		<div class="fine">${t('sub_fine')}</div>
 	</div>
 </div>`;
 
 /** ตัวจัดการโมดัล: เปิดจากปุ่ม [data-sub-open], ปิดด้วย X / คลิกนอกกล่อง / Esc, ส่งอีเมลผ่าน /api/subscribe */
-export const SUB_JS = `(function(){
+export const SUB_JS = () => `(function(){
 var m=document.getElementById('subm');
 if(!m)return;
+var S=${JSON.stringify(tMany(['sub_need', 'sub_sending', 'sub_rate', 'sub_sent', 'sub_error', 'sub_conn']))};
 var f=document.getElementById('subf'),em=document.getElementById('subem'),go=document.getElementById('subgo'),msg=document.getElementById('submsg');
 var lastFocus=null;
 function say(t,c){if(msg){msg.textContent=t;msg.className='msg '+(c||'');}}
@@ -78,16 +80,16 @@ if(f){
 	f.addEventListener('submit',function(e){
 		e.preventDefault();
 		var v=((em&&em.value)||'').trim();
-		if(!v){say('กรุณาใส่อีเมล','err');return;}
-		if(go)go.disabled=true;say('กำลังส่ง…');
+		if(!v){say(S.sub_need,'err');return;}
+		if(go)go.disabled=true;say(S.sub_sending);
 		fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:v})})
 		.then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
 		.then(function(x){
-			if(x.s===429)say('ขอบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่','warn');
-			else if(x.j.ok){say('ส่งลิงก์ยืนยันไปที่อีเมลของคุณแล้ว กรุณาเช็ค inbox หรือ spam','ok');f.reset();}
-			else say(x.j.error||'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง','err');
+			if(x.s===429)say(S.sub_rate,'warn');
+			else if(x.j.ok){say(S.sub_sent,'ok');f.reset();}
+			else say(x.j.error||S.sub_error,'err');
 		})
-		.catch(function(){say('เชื่อมต่อไม่ได้ ลองใหม่อีกครั้ง','err');})
+		.catch(function(){say(S.sub_conn,'err');})
 		.finally(function(){if(go)go.disabled=false;});
 	});
 }

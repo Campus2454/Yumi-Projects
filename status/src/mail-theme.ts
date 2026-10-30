@@ -1,3 +1,4 @@
+import { fmtLong, prefs } from './i18n.js';
 /**
  * ธีมอีเมลกลาง: พื้นหลังโปร่งใส และสีตัวอักษร/การ์ดปรับตามธีมของผู้ใช้
  *  - ค่าเริ่มต้น (inline) เป็นสีสว่าง ใช้กับไคลเอนต์ที่ไม่รองรับ <style>
@@ -8,7 +9,8 @@ export const FONT = `'Kanit','Noto Sans Thai',Tahoma,'Segoe UI',Arial,sans-serif
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
-export const nowTh = () => new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', dateStyle: 'long', timeStyle: 'short', hour12: false });
+/** เวลาตอนนี้ ตามภาษาและเขตเวลาของผู้รับ (i18n prefs) */
+export const nowTh = () => fmtLong();
 
 export const MAIL_STYLE = `
 body,table,td,a{-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%}
@@ -47,7 +49,7 @@ a{text-decoration:none}
 /** เลย์เอาต์หลักของอีเมลทุกฉบับ */
 export function mailDoc(title: string, inner: string, preheader = ''): string {
 	return `<!doctype html>
-<html lang="th"><head>
+<html lang="${prefs().lang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${esc(title)}</title>

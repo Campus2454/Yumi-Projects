@@ -4,7 +4,9 @@ import { formatDataSize } from 'global/common-functions';
 import type { Brief, Range, Report, SeriesPoint } from './history.js';
 import { COLORS, seriesLine, svgChart } from './chart.js';
 import { fmtDateTh, fmtDayTh, fmtDurTh, fmtPct } from './format.js';
-import { ICON, RANGE_LONG, brand, esc, lastLine, rangeBar, resourcePanels, segTip, shell, type PageCtx } from './pages.js';
+import { ICON, RANGE_LONG, backBtn, brand, esc, lastLine, pageLinks, rangeBar, resourcePanels, segTip, shell, type PageCtx } from './pages.js';
+import { t, type Key } from './i18n.js';
+import { STRINGS } from './strings.js';
 
 /* ------------------------------------------------------------------ */
 /*  ข้อมูล node เพลง (Lavalink / NodeLink)                               */
@@ -53,14 +55,16 @@ export async function refreshMusic(): Promise<MusicSnapshot | null> {
 /*  (บัญชีที่ใช้, image, ข้อความ error ดิบ, วิธีตรวจ) เหลือแค่ข้อความกลาง ๆ */
 /* ------------------------------------------------------------------ */
 const SAFE_REASONS = [
-	{ re: /เชื่อมต่อ node ไม่ได้/, text: 'เชื่อมต่อ node ไม่ได้' },
-	{ re: /ไม่ตอบ/, text: 'node ไม่ตอบสนอง' },
-	{ re: /เพลงค้าง/, text: 'เล่นเพลงไม่ต่อเนื่อง' },
-];
+	{ re: /เชื่อมต่อ node ไม่ได้/, text: 'r_connect' },
+	{ re: /ไม่ตอบ/, text: 'r_timeout' },
+	{ re: /เพลงค้าง/, text: 'r_stall' },
+] as const;
+/** สาเหตุเก็บเป็นคีย์ข้อความ (r_*) แล้วแปลตอนแสดงผลตามภาษาของผู้ชม */
+export const reasonText = (k: string | null | undefined) => t((k && k in STRINGS ? k : 'r_temp') as Key);
 function publicReason(th: string | null, up: boolean): string | null {
 	if (up && !th) return null;
 	for (const r of SAFE_REASONS) if (th && r.re.test(th)) return r.text;
-	return 'ขัดข้องชั่วคราว';
+	return 'r_temp';
 }
 function toPublic(m: MusicSnapshot): MusicSnapshot {
 	return {
@@ -139,20 +143,21 @@ const MUSIC_CSS = `<style>
 @media (max-width:720px){.srow{grid-template-columns:1fr auto}.srow .sd{grid-column:1/-1;order:3}}
 </style>`;
 
-const SOURCE_TH: Record<string, string> = { youtube: 'YouTube', soundcloud: 'SoundCloud', http: 'ไฟล์เสียงทั่วไป (http)' };
+const SOURCE_NAME: Record<string, () => string> = { youtube: () => 'YouTube', soundcloud: () => 'SoundCloud', http: () => t('src_http') };
+const srcName = (k: string) => SOURCE_NAME[k]?.() ?? k;
 const memText = (m: MusicNode['mem']) => (m && m.used !== null && m.total !== null
 	? `${formatDataSize('byte', m.used, 'short')} / ${formatDataSize('byte', m.total, 'short')}` : null);
 
 const bars = (r: Report) => r.buckets.map(k => {
 	const cls = k.observed <= 0 ? 'na' : k.down <= 0 ? 'ok' : k.down < 5 * 60_000 ? 'warn' : 'bad';
-	const tip = k.observed <= 0 ? 'ไม่มีข้อมูล' : k.down <= 0 ? 'ไม่มี downtime' : `ล่ม ${fmtDurTh(k.down)}`;
+	const tip = k.observed <= 0 ? t('no_data') : k.down <= 0 ? t('no_downtime') : t('down_for', { d: fmtDurTh(k.down) });
 	const sp = k.end - k.start;
 	const label = sp >= 36 * 3_600_000 ? `${fmtDayTh(k.start)} - ${fmtDayTh(k.end - 1)}` : sp >= 20 * 3_600_000 ? fmtDayTh(k.end - 1) : fmtDateTh(k.start);
 	return `<i class="${cls}" title="${label}: ${tip}"></i>`;
 }).join('');
 
 const nodeState = (n: MusicNode) => (!n.up ? 'down' : n.sources.youtube && !n.sources.youtube.ok ? 'warn' : 'ok');
-const stateLabel: Record<string, string> = { ok: 'กำลังทำงาน', warn: 'ทำงาน แต่บางแหล่งเพลงใช้ไม่ได้', down: 'หยุดทำงาน', load: 'ไม่ทราบสถานะ' };
+const stateLabel: Record<string, string> = { get ok() { return t('state_ok'); }, get warn() { return t('node_warn'); }, get down() { return t('state_down'); }, get load() { return t('state_unknown'); } };
 
 /** หน้ารวม /nodes: การ์ดของแต่ละ node */
 export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], range: Range, ctx: PageCtx): string {
@@ -160,24 +165,24 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 	const up = items.filter(i => i.n.up).length;
 	const total = items.length;
 	const key = !m ? 'load' : up === 0 ? 'down' : 'ok';
-	const title = !m ? 'ยังไม่ได้รับข้อมูล node เพลง' : up === total ? 'node เพลงทำงานครบทุกตัว' : up === 0 ? 'node เพลงหยุดทำงานทั้งหมด' : `node เพลงทำงาน ${up} จาก ${total} ตัว`;
+	const title = !m ? t('nodes_nodata') : up === total ? t('nodes_all_up') : up === 0 ? t('nodes_all_down') : t('nodes_some_up', { n: up, total });
 	const sub = !m
-		? `ติดต่อระบบเฝ้าดูของบอทเพลงไม่ได้${musicError() ? ` (${esc(musicError()!)})` : ''}`
-		: 'บอทเพลงใช้งานได้ถ้ามี node ทำงานอย่างน้อย 1 ตัว ระบบย้ายเพลงไป node ที่เหลือให้อัตโนมัติ';
+		? `${t('nodes_unreachable')}${musicError() ? ` (${esc(musicError()!)})` : ''}`
+		: t('nodes_sub');
 
 	const players = items.reduce((a, i) => a + (i.n.playingPlayers ?? 0), 0);
 	const cards = items.map(({ n, r }) => {
 		const k = nodeState(n);
 				const chips = Object.entries(n.sources).map(([src, v]) =>
-			`<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${esc(SOURCE_TH[src] ?? src)}</span>`).join('');
+			`<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${esc(srcName(src))}</span>`).join('');
 		return `<a class="ncard glass" data-state="${k === 'warn' ? 'load' : k}" style="${k === 'warn' ? '--c:var(--warn)' : ''}" href="/nodes/${encodeURIComponent(n.name)}?range=${range}" translate="no">
 	<div class="nhead"><div><div class="nm">${esc(n.name)}</div><div class="st"><span class="dot"></span>${stateLabel[k]} <span class="kind ${n.kind}">${KIND_LABEL[n.kind]}</span></div></div>
-		<div class="players"><b>${n.up ? (n.playingPlayers ?? 0) : '–'}</b><span>กำลังเล่น${n.up && n.players !== null ? ` / ${n.players} player` : ''}</span></div></div>
+		<div class="players"><b>${n.up ? (n.playingPlayers ?? 0) : '–'}</b><span>${t('node_playing')}${n.up && n.players !== null ? ` / ${t('node_players', { n: n.players })}` : ''}</span></div></div>
 	${n.up ? `<div class="nstats">
 		<div><div class="k">Ping</div><div class="v">${n.pingMs ?? '–'} ms</div></div>
 		<div><div class="k">CPU</div><div class="v">${n.cpu !== null ? `${n.cpu.toFixed(1)}%` : '–'}</div></div>
 		<div><div class="k">RAM</div><div class="v">${n.mem ? `${n.mem.percent.toFixed(0)}%` : '–'}</div></div></div>`
-		: `<div class="nstats" style="grid-template-columns:1fr"><div><div class="k">สาเหตุ</div><div class="v">${esc(n.errorTh || n.error || 'ไม่ทราบสาเหตุ')}</div></div></div>`}
+		: `<div class="nstats" style="grid-template-columns:1fr"><div><div class="k">${t('node_cause')}</div><div class="v">${esc(reasonText(n.errorTh))}</div></div></div>`}
 	<div class="chips">${chips}</div>
 	<div class="bars">${bars(r)}</div>
 	<div class="nfoot"><span>uptime ${RANGE_LONG[range]}</span><b>${fmtPct(r.stat.pct)}</b></div>
@@ -188,12 +193,13 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}</div>` : ''}
 <section class="hero glass">
 	<div class="hl"><span class="pulse"></span><div><h1>${title}</h1><p>${sub}</p></div></div>
-	<div class="bigpct"><b>${players}</b><span>เพลงที่กำลังเล่นอยู่ตอนนี้</span></div>
+	<div class="bigpct"><b>${players}</b><span>${t('nodes_playing_now')}</span></div>
 </section>
-<div class="toolbar"><h2 class="tt">Node ทั้งหมด</h2>${rangeBar('/nodes', range)}</div>
-${total ? `<section class="ngrid">${cards}</section>` : '<section class="panel glass"><div class="none">ยังไม่มีข้อมูล node</div></section>'}
+<div class="toolbar"><h2 class="tt">${t('nodes_all')}</h2>${rangeBar('/nodes', range)}</div>
+${total ? `<section class="ngrid">${cards}</section>` : `<section class="panel glass"><div class="none">${t('nodes_none')}</div></section>`}
+${pageLinks(range)}
 ${s ? '' : ''}`;
-	return shell('Yumi - สถานะ node เพลง', `<a class="btn" href="/" aria-label="กลับหน้าแรก">${ICON.back}</a>${brand}`, main, key);
+	return shell(t('nodes_title'), backBtn() + brand, main, key);
 }
 
 /** หน้ารายละเอียด /nodes/:node */
@@ -211,48 +217,48 @@ export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range,
 		`<div class="tile glass"><div class="k">${label}</div><div class="v">${value}</div>${pct !== null ? `<div class="meter"><i style="width:${Math.min(100, pct)}%"></i></div>` : ''}</div>`;
 	const tile = (label: string, value: string | null) => `<div class="tile glass"><div class="k">${label}</div>${value ? `<div class="v">${value}</div>` : '<div class="v na">N/A</div>'}</div>`;
 	const tiles = n.up ? `
-	${tile('เพลงที่กำลังเล่น', n.playingPlayers !== null ? `${n.playingPlayers} <small style="font-size:.9rem;color:var(--muted);font-weight:300">/ ${n.players} player</small>` : null)}
+	${tile(t('node_songs'), n.playingPlayers !== null ? `${n.playingPlayers} <small style="font-size:.9rem;color:var(--muted);font-weight:300">/ ${t('node_players', { n: n.players ?? 0 })}</small>` : null)}
 	${tile('Ping', n.pingMs !== null ? `${n.pingMs} ms` : null)}
-	${n.cpu !== null ? meter('การใช้ CPU', `${n.cpu.toFixed(2)}%`, n.cpu) : tile('การใช้ CPU', null)}
-	${n.mem ? meter('การใช้หน่วยความจำ', esc(memText(n.mem) ?? `${n.mem.percent}%`), n.mem.percent) : tile('การใช้หน่วยความจำ', null)}`
-		: tile('สาเหตุที่หยุดทำงาน', esc(n.errorTh || n.error || 'ไม่ทราบสาเหตุ'));
+	${n.cpu !== null ? meter(t('tile_cpu'), `${n.cpu.toFixed(2)}%`, n.cpu) : tile(t('tile_cpu'), null)}
+	${n.mem ? meter(t('tile_mem'), esc(memText(n.mem) ?? `${n.mem.percent}%`), n.mem.percent) : tile(t('tile_mem'), null)}`
+		: tile(t('node_down_cause'), esc(reasonText(n.errorTh)));
 
 	const srcRows = Object.entries(n.sources).map(([src, v]) => `<div class="srow">
-	<div class="sn">${esc(SOURCE_TH[src] ?? src)}</div>
-	<div class="sd">${v.ok ? 'ใช้งานได้' : esc(v.errorTh || 'ใช้งานไม่ได้')}</div>
-	<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${v.ok ? 'ปกติ' : 'ขัดข้อง'}</span></div>`).join('')
-		|| '<div class="none">ยังไม่มีผลตรวจแหล่งเพลง</div>';
+	<div class="sn">${esc(srcName(src))}</div>
+	<div class="sd">${v.ok ? t('src_ok') : esc(v.errorTh ? reasonText(v.errorTh) : t('src_bad'))}</div>
+	<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${v.ok ? t('src_okchip') : t('src_badchip')}</span></div>`).join('')
+		|| `<div class="none">${t('src_none')}</div>`;
 
 	const kv = (label: string, value: string | null) => `<div><span>${label}</span><b>${value ? esc(value) : '–'}</b></div>`;
 	const info = [
-		kv('ชนิด', KIND_LABEL[n.kind]),
-		kv('เวอร์ชัน', n.version),
-		kv('เริ่ม container', n.startedAt ? fmtDateTh(n.startedAt) : null),
-		kv('Node uptime', n.nodeUptimeMs !== null ? fmtDurTh(n.nodeUptimeMs) : null),
-		kv('Container restart', n.restarts !== null ? `${n.restarts} ครั้ง` : null),
-		kv('YouTube ใช้ได้ 24 ชม.', n.history24.youtube),
-		kv('Node ทำงาน 24 ชม.', n.history24.uptime),
-		kv('ล่มล่าสุด', n.lastDown ? `${fmtDurTh(n.lastDown.end - n.lastDown.start)} (${fmtDateTh(n.lastDown.end)})` : 'ยังไม่เคยล่ม'),
+		kv(t('node_kind'), KIND_LABEL[n.kind]),
+		kv(t('tile_version'), n.version),
+		kv(t('node_started'), n.startedAt ? fmtDateTh(n.startedAt) : null),
+		kv(t('node_uptime'), n.nodeUptimeMs !== null ? fmtDurTh(n.nodeUptimeMs) : null),
+		kv(t('node_restarts'), n.restarts !== null ? t('node_times', { n: n.restarts }) : null),
+		kv(t('node_yt24'), n.history24.youtube),
+		kv(t('node_up24'), n.history24.uptime),
+		kv(t('node_lastdown'), n.lastDown ? `${fmtDurTh(n.lastDown.end - n.lastDown.start)} (${fmtDateTh(n.lastDown.end)})` : t('node_neverdown')),
 	].join('');
 
 	const stt = r.stat;
 	const avail = `
-	<div><div class="k">Uptime</div><b>${fmtPct(stt.pct)}</b><small>${stt.observed ? `จากข้อมูล ${fmtDurTh(stt.observed)}` : 'ยังไม่มีข้อมูล'}</small></div>
-	<div><div class="k">Downtime รวม</div><b>${stt.down ? fmtDurTh(stt.down) : 'ไม่มี'}</b><small>${stt.down ? 'เวลาที่ล่มสะสม' : 'ไม่เคยล่มในช่วงนี้'}</small></div>
-	<div><div class="k">จำนวนครั้งที่ล่ม</div><b>${stt.incidents} ครั้ง</b><small>นับทุกช่วงที่หยุดทำงาน</small></div>
-	<div><div class="k">ล่มนานที่สุด</div><b>${stt.longest ? fmtDurTh(stt.longest) : 'ไม่มี'}</b><small>ต่อเนื่องครั้งเดียว</small></div>`;
+	<div><div class="k">Uptime</div><b>${fmtPct(stt.pct)}</b><small>${stt.observed ? t('av_from', { d: fmtDurTh(stt.observed) }) : t('av_none')}</small></div>
+	<div><div class="k">${t('av_down_total')}</div><b>${stt.down ? fmtDurTh(stt.down) : t('av_none_short')}</b><small>${stt.down ? t('av_down_acc') : t('av_never')}</small></div>
+	<div><div class="k">${t('av_count')}</div><b>${t('av_times', { n: stt.incidents })}</b><small>${t('av_count_note')}</small></div>
+	<div><div class="k">${t('av_longest')}</div><b>${stt.longest ? fmtDurTh(stt.longest) : t('av_none_short')}</b><small>${t('av_longest_note')}</small></div>`;
 
 	const span = now - r.from;
 	const strip = r.strip.map(g => {
 		const kk = g.status === 1 ? 'ok' : g.status === 0 ? (g.end - g.start < 5 * 60_000 ? 'warn' : 'down') : 'load';
-		const label = g.status === 1 ? 'กำลังทำงาน' : g.status === 0 ? 'หยุดทำงาน' : 'ไม่ทราบสถานะ';
+		const label = g.status === 1 ? t('state_ok') : g.status === 0 ? t('state_down') : t('state_unknown');
 		return `<i class="${kk}" style="left:${g.left.toFixed(3)}%;width:${g.width.toFixed(3)}%" data-tip="${esc(segTip(g, label, kk))}"></i>`;
 	}).join('');
 
 	const incidents = r.incidents.length
-		? r.incidents.map(i => `<div class="inc"><div class="w">${fmtDateTh(i.start)}${i.end ? ` ถึง ${fmtDateTh(i.end)}` : ''}</div>
-		${i.end ? `<div class="d">${fmtDurTh(i.duration)}</div>` : `<div class="d on">กำลังล่มอยู่ <span data-since="${i.start}">${fmtDurTh(now - i.start)}</span></div>`}</div>`).join('')
-		: '<div class="none">ไม่มี downtime ในช่วงที่เลือก</div>';
+		? r.incidents.map(i => `<div class="inc"><div class="w">${i.end ? t('from_to', { a: fmtDateTh(i.start), b: fmtDateTh(i.end) }) : fmtDateTh(i.start)}</div>
+		${i.end ? `<div class="d">${fmtDurTh(i.duration)}</div>` : `<div class="d on">${t('down_now')} <span data-since="${i.start}">${fmtDurTh(now - i.start)}</span></div>`}</div>`).join('')
+		: `<div class="none">${t('no_down_range')}</div>`;
 
 	const main = `${MUSIC_CSS}
 ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}</div>` : ''}
@@ -262,18 +268,19 @@ ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}<
 		<span class="pill">${stateLabel[k]}</span><span class="kind ${n.kind}">${KIND_LABEL[n.kind]}</span></div>
 	<div class="clock">${clock}</div>
 </section>
-${!n.up ? `<div class="warnbox">node นี้หยุดทำงาน เพลงที่เคยเล่นบน node นี้ถูกย้ายไป node อื่นแล้ว</div>` : ''}
+${!n.up ? `<div class="warnbox">${t('node_moved')}</div>` : ''}
 <section class="tiles">${tiles}</section>
-<section class="panel glass" style="margin-top:16px"><h2>แหล่งเพลง</h2>${srcRows}</section>
-<section class="panel glass"><h2>ข้อมูล node</h2><div class="kv">${info}</div></section>
-<div class="toolbar"><h2 class="tt">ข้อมูลย้อนหลัง</h2>${rangeBar(base, range)}</div>
-<section class="panel glass"><h2>ความพร้อมใช้งาน (${RANGE_LONG[range]})</h2><div class="avail">${avail}</div></section>
-<section class="panel glass"><h2>ไทม์ไลน์สถานะ</h2>
+<section class="panel glass" style="margin-top:16px"><h2>${t('node_sources')}</h2>${srcRows}</section>
+<section class="panel glass"><h2>${t('node_info')}</h2><div class="kv">${info}</div></section>
+<div class="toolbar"><h2 class="tt">${t('history')}</h2>${rangeBar(base, range)}</div>
+<section class="panel glass"><h2>${t('availability', { range: RANGE_LONG[range] })}</h2><div class="avail">${avail}</div></section>
+<section class="panel glass"><h2>${t('timeline')}</h2>
 	<div class="strip">${strip}</div>
-	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>ตอนนี้</span></div></section>
-<section class="panel glass"><h2>เวลาตอบสนอง (Ping)</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
+	<div class="axis"><span>${fmtDateTh(r.from)}</span><span>${fmtDateTh(r.from + span / 2)}</span><span>${t('now')}</span></div></section>
+<section class="panel glass"><h2>${t('ping_title')}</h2>${svgChart([seriesLine(series, 'ping', 'Ping', COLORS[2])], ' ms')}</section>
 ${resourcePanels(series)}
-<section class="panel glass"><h2>ประวัติ downtime</h2>${incidents}</section>`;
+<section class="panel glass"><h2>${t('down_history')}</h2>${incidents}</section>
+${pageLinks(range)}`;
 
-	return shell(`Yumi - ${esc(n.name)}`, `<a class="btn" href="/nodes?range=${range}" aria-label="กลับหน้ารวม node">${ICON.back}</a>${brand}`, main, stKey);
+	return shell(`Yumi - ${esc(n.name)}`, backBtn(`/nodes?range=${range}`) + brand, main, stKey);
 }

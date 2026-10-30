@@ -6,6 +6,8 @@ import { getBanner, getMaintenance, getSegment, getSetting, recentDowns, setSegm
 import { adminCounts, adminDeleteSubscriber, adminListSubscribers, adminRevoke } from './subscribers.js';
 import { sendRaw } from './mail.js';
 import { displayName, fmtDateTh, fmtDurTh } from './format.js';
+import { prefs } from './i18n.js';
+import { GEAR, SET_CSS, firstVisitScript, settingsModal, settingsScript } from './settings-ui.js';
 
 /* ------------------------------------------------------------------ */
 /*  ตั้งค่า                                                             */
@@ -224,16 +226,22 @@ button:disabled{opacity:.4;cursor:not-allowed;filter:none}
 `;
 
 const page = (title: string, body: string) => `<!doctype html>
-<html lang="th"><head>
+<html lang="${prefs().lang}"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow"><title>${esc(title)}</title>
 <link rel="icon" href="${LOGO}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;600;700&display=swap" rel="stylesheet">
-<style>${CSS}</style></head>
-<body>${body}</body></html>`;
+<style>${CSS}${SET_CSS}
+.gear svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.gear-fixed{position:fixed;top:16px;right:16px;z-index:5}</style>
+${firstVisitScript()}</head>
+<body${prefs().calm ? ' class="calm"' : ''}>${body}
+${settingsModal(prefs().sub ?? null)}
+<script>${settingsScript()}</script></body></html>`;
 
 const loginPage = (err?: string) => page('เข้าสู่ระบบผู้ดูแล - Yumi Status', `
+<button class="ghost gear gear-fixed" type="button" data-set-open aria-label="ตั้งค่า">${GEAR}</button>
 <div class="login-wrap"><section class="glass login">
 	<img class="logo" src="${LOGO}" alt="">
 	<h1>ผู้ดูแลระบบ</h1>
@@ -266,6 +274,7 @@ const topbar = (csrf: string) => `
 	<nav class="nav">${SECTIONS.map(([h, t]) => `<a href="/admin${h}">${t}</a>`).join('')}</nav>
 	<div class="row">
 		<a class="btn ghost" href="/">${ic('home')} หน้าสถานะ</a>
+		<button class="ghost gear" type="button" data-set-open title="ตั้งค่า" aria-label="ตั้งค่า">${GEAR}</button>
 		<form method="post" action="/admin/logout" class="inline"><input type="hidden" name="_csrf" value="${esc(csrf)}">
 			<button class="ghost" type="submit">${ic('logout')} ออก</button></form>
 	</div>
