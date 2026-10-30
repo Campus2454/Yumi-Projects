@@ -15,7 +15,7 @@ import { HOST_MEM, cpuOfHost, memOfHost } from './host.js';
 /*  docker0 เท่านั้น: http://host.docker.internal:30065/status            */
 /* ------------------------------------------------------------------ */
 
-export type MusicSource = { ok: boolean; level: string | null; error: string | null; errorTh: string | null };
+export type MusicSource = { ok: boolean; off?: boolean; level: string | null; error: string | null; errorTh: string | null };
 export type MusicNode = {
 	name: string; kind: 'nodelink' | 'lavalink'; up: boolean;
 	error: string | null; errorTh: string | null;
@@ -79,7 +79,7 @@ function toPublic(m: MusicSnapshot): MusicSnapshot {
 			// sidecar ส่ง CPU เป็น % ของ 1 core และ RAM เทียบ limit ของ container: แปลงเป็นเทียบทั้งเครื่อง เหมือน service อื่น
 			cpu: n.cpu !== null ? cpuOfHost(n.cpu) : null,
 			mem: n.mem && n.mem.used !== null ? { used: n.mem.used, total: HOST_MEM, percent: memOfHost(n.mem.used) } : n.mem,
-			sources: Object.fromEntries(Object.entries(n.sources).map(([k, v]) => [k, { ok: v.ok, level: null, error: null, errorTh: v.ok ? null : publicReason(v.errorTh, false) }])),
+			sources: Object.fromEntries(Object.entries(n.sources).map(([k, v]) => [k, { ok: v.ok, off: !!v.off, level: null, error: null, errorTh: v.ok || v.off ? null : publicReason(v.errorTh, false) }])),
 		})),
 	};
 }
@@ -133,6 +133,7 @@ const MUSIC_CSS = `<style>
 .chip i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
 .chip.ok{color:#bdf5dd;border-color:rgba(61,220,151,.35)}.chip.ok i{background:var(--ok)}
 .chip.bad{color:#ffc2c4;border-color:rgba(255,90,95,.4)}.chip.bad i{background:var(--down)}
+.chip.off{color:var(--dim);border-color:rgba(255,255,255,.12)}.chip.off i{background:rgba(255,255,255,.25)}
 .nfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;color:var(--dim);font-size:.82rem;font-weight:300}
 .nfoot b{color:var(--ink);font-weight:600}
 .ncard .bars{height:24px}
@@ -147,7 +148,7 @@ const MUSIC_CSS = `<style>
 @media (max-width:720px){.srow{grid-template-columns:1fr auto}.srow .sd{grid-column:1/-1;order:3}}
 </style>`;
 
-const SOURCE_NAME: Record<string, () => string> = { youtube: () => 'YouTube', soundcloud: () => 'SoundCloud', http: () => t('src_http') };
+const SOURCE_NAME: Record<string, () => string> = { youtube: () => 'YouTube', soundcloud: () => 'SoundCloud', http: () => t('src_http'), spotify: () => 'Spotify', applemusic: () => 'Apple Music', deezer: () => 'Deezer' };
 const srcName = (k: string) => SOURCE_NAME[k]?.() ?? k;
 const memText = (m: MusicNode['mem']) => (m && m.used !== null && m.total !== null
 	? `${formatDataSize('byte', m.used, 'short')} / ${formatDataSize('byte', m.total, 'short')}` : null);
@@ -178,7 +179,7 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 	const cards = items.map(({ n, r }) => {
 		const k = nodeState(n);
 				const chips = Object.entries(n.sources).map(([src, v]) =>
-			`<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${esc(srcName(src))}</span>`).join('');
+			`<span class="chip ${v.ok ? 'ok' : v.off ? 'off' : 'bad'}"><i></i>${esc(srcName(src))}</span>`).join('');
 		return `<a class="ncard glass" data-state="${k === 'warn' ? 'load' : k}" style="${k === 'warn' ? '--c:var(--warn)' : ''}" href="/nodes/${encodeURIComponent(n.name)}?range=${range}" translate="no">
 	<div class="nhead"><div><div class="nm">${esc(n.name)}</div><div class="st"><span class="dot"></span>${stateLabel[k]} <span class="kind ${n.kind}">${KIND_LABEL[n.kind]}</span></div></div>
 		<div class="players"><b>${n.up ? (n.playingPlayers ?? 0) : '–'}</b><span>${t('node_playing')}${n.up && n.players !== null ? ` / ${t('node_players', { n: n.players })}` : ''}</span></div></div>
@@ -229,8 +230,8 @@ export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range,
 
 	const srcRows = Object.entries(n.sources).map(([src, v]) => `<div class="srow">
 	<div class="sn">${esc(srcName(src))}</div>
-	<div class="sd">${v.ok ? t('src_ok') : esc(v.errorTh ? reasonText(v.errorTh) : t('src_bad'))}</div>
-	<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${v.ok ? t('src_okchip') : t('src_badchip')}</span></div>`).join('')
+	<div class="sd">${v.ok ? t('src_ok') : v.off ? t('src_off') : esc(v.errorTh ? reasonText(v.errorTh) : t('src_bad'))}</div>
+	<span class="chip ${v.ok ? 'ok' : v.off ? 'off' : 'bad'}"><i></i>${v.ok ? t('src_okchip') : v.off ? t('src_offchip') : t('src_badchip')}</span></div>`).join('')
 		|| `<div class="none">${t('src_none')}</div>`;
 
 	const kv = (label: string, value: string | null) => `<div><span>${label}</span><b>${value ? esc(value) : '–'}</b></div>`;
