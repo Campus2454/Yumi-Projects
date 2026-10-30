@@ -4,7 +4,7 @@ import { formatTime } from "../utils/messages.js";
 import { Kazagumo } from "kazagumo";
 import Env from "../utils/env.js";
 import { InteractionElements } from "../utils/interactionElements.js";
-import { musicSearch } from "../music/resolver.js";
+import { choiceValue, musicSearch } from "../music/resolver.js";
 type Locale = 'id' | 'da' | 'de' | 'en-GB' | 'en-US' | 'es-ES' | 'es-419' | 'fr' | 'hr' | 'it' | 'lt' | 'hu' | 'nl' | 'no' | 'pl' | 'pt-BR' | 'ro' | 'fi' | 'sv-SE' | 'vi' | 'tr' | 'cs' | 'el' | 'bg' | 'ru' | 'uk' | 'hi' | 'th' | 'zh-CN' | 'ja' | 'zh-TW' | 'ko';
 
 export class Autocomplete {
@@ -46,7 +46,7 @@ if(interaction.guild){
 
         const choices: ApplicationCommandOptionChoiceData[] = tracks.slice(0, 25).map((track,i) => ({
           name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
-          value: track.uri || `unknown${i}`,
+          value: choiceValue(track, i),
         }));
 
         return interaction.respond(choices);
@@ -75,7 +75,7 @@ if(interaction.guild){
 
             const choices: ApplicationCommandOptionChoiceData[] = tracks.slice(0, 25).map((track,i) => ({
               name: `${track.sourceName || 'unknown'}・${track.title.slice(0, 80)} 「${formatTime((track.length || 0) / 1000)}」`.slice(0, 100),
-              value: track.uri || `unknown${i}`,
+              value: choiceValue(track, i),
             }));
 
             return interaction.respond(choices);

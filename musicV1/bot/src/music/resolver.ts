@@ -247,10 +247,30 @@ async function autocomplete(kazagumo: Kazagumo, node: Node, query: string, opts:
   return { type: 'SEARCH', tracks: wrap(kazagumo, all.slice(0, 10), opts.requester) };
 }
 
+// Discord autocomplete values are limited to 100 characters, and some track URLs are longer
+// (SoundCloud/Audiomack slugs, YouTube links with playlist params). Long ones become "pick:<id>"
+// and resolve back to the exact track the user picked.
+const picks = new Map<string, { at: number; track: Track }>();
+export function choiceValue(track: KazagumoTrack, i: number): string {
+  const uri = track.uri || '';
+  if (uri && uri.length <= 100) return uri;
+  const raw = (track.getRaw() as { _raw?: Track })._raw;
+  if (!raw) return `unknown${i}`;
+  const id = `pick:${Date.now().toString(36)}${i}${Math.random().toString(36).slice(2, 6)}`;
+  picks.set(id, { at: Date.now(), track: raw });
+  for (const [k, v] of picks) if (Date.now() - v.at > 30 * 60_000) picks.delete(k);
+  return id;
+}
+
 // Drop-in replacement for kazagumo.search(): cache, source order, breaker, limits.
 export async function musicSearch(kazagumo: Kazagumo, query: string, opts: MusicSearchOptions = {}): Promise<MusicSearchResult> {
   const node = pickNode(kazagumo, opts.nodeName);
   if (!node) throw new Error('No node is available');
+  const picked = query.startsWith('pick:') ? picks.get(query.trim()) : undefined;
+  if (picked) {
+    const t = await portTrack(kazagumo, picked.track, node);
+    if (t) return { type: 'TRACK', tracks: wrap(kazagumo, [t], opts.requester) };
+  }
   if (opts.kind === 'autocomplete') return autocomplete(kazagumo, node, query, opts);
 
   const exclude = opts.exclude || [];

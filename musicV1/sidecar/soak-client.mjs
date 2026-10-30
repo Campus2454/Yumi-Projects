@@ -109,24 +109,32 @@ client.once('clientReady', async () => {
       await sleep(10000);
       continue;
     }
-    ended = false; error = null;
-    await player.playTrack({ track: { encoded: track.encoded } }).catch(e => { error = e.message; ended = true; });
-    log(`play ${node.name} ${track.info.sourceName}:${track.info.identifier} ${track.info.title}`);
-    let last = -1;
-    // Long uploads (hour-long mixes) would keep one node busy; 4 verified minutes are enough.
-    const stopAt = Date.now() + 4 * 60_000;
-    while (!ended) {
-      if (Date.now() > stopAt) { await player.stopTrack().catch(() => {}); break; }
-      await sleep(30000);
-      if (ended) break;
-      const live = await player.node.rest.getPlayer(guildId).catch(() => null);
-      const pos = live?.state?.position ?? -1;
-      if (pos <= last) {
-        stats.stalls++;
-        log(`STALL ${player.node.name} pos=${pos} last=${last} connected=${live?.state?.connected}`);
-        if (pos === last) { error = 'stalled'; break; }
+    // Same as the bot: a NodeLink voice start timeout is retried once with the same track.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      ended = false; error = null;
+      await player.playTrack({ track: { encoded: track.encoded } }).catch(e => { error = e.message; ended = true; });
+      log(`play ${node.name} ${track.info.sourceName}:${track.info.identifier} ${track.info.title}`);
+      let last = -1;
+      // Long uploads (hour-long mixes) would keep one node busy; 4 verified minutes are enough.
+      const stopAt = Date.now() + 4 * 60_000;
+      while (!ended) {
+        if (Date.now() > stopAt) { await player.stopTrack().catch(() => {}); break; }
+        await sleep(30000);
+        if (ended) break;
+        const live = await player.node.rest.getPlayer(guildId).catch(() => null);
+        const pos = live?.state?.position ?? -1;
+        if (pos <= last) {
+          stats.stalls++;
+          log(`STALL ${player.node.name} pos=${pos} last=${last} connected=${live?.state?.connected}`);
+          if (pos === last) { error = 'stalled'; break; }
+        }
+        last = pos;
       }
-      last = pos;
+      if (attempt === 0 && error && /playerStateChange timed out|Voice playback state timed out/i.test(error)) {
+        log(`RETRY ${node.name} ${track.info.title}: ${error}`);
+        continue;
+      }
+      break;
     }
     if (error) { stats.failed++; log(`FAIL ${node.name} ${track.info.title}: ${error}`); } else stats.played++;
     report(node.name, track.info.sourceName, !error, error || undefined, track.info.title);
