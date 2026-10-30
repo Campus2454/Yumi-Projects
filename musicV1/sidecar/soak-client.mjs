@@ -57,11 +57,22 @@ shoukaku.on('close', async (name) => {
 });
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+// Discord sometimes answers a join without a voice endpoint; retry instead of crashing.
+async function join() {
+  for (let i = 1; ; i++) {
+    try { return await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true }); }
+    catch (e) {
+      log(`join failed (${i}): ${e.message}`);
+      await shoukaku.leaveVoiceChannel(guildId).catch(() => {});
+      await sleep(Math.min(60_000, 5000 * i));
+    }
+  }
+}
 const stats = { played: 0, failed: 0, stalls: 0 };
 
 client.once('clientReady', async () => {
   await sleep(3000);
-  let player = await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true });
+  let player = await join();
   let ended = true, error = null;
   const wire = (p) => {
     p.on('end', () => { ended = true; });
@@ -82,7 +93,7 @@ client.once('clientReady', async () => {
       await shoukaku.leaveVoiceChannel(guildId).catch(() => {});
       await sleep(2000);
       wanted = want.name;
-      player = await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true });
+      player = await join();
       wire(player);
       // Give the node a moment to finish the voice handshake (NodeLink can miss it otherwise).
       await sleep(2000);
@@ -123,7 +134,7 @@ client.once('clientReady', async () => {
     // Voice dropped (e.g. Discord voice server change): join again.
     if (!shoukaku.connections.get(guildId)) {
       log('rejoining voice');
-      player = await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true });
+      player = await join();
       wire(player);
     }
   }
