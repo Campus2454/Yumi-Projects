@@ -10,15 +10,19 @@ export type SourceDef = {
   key: string;
   // Results from a non-final source must look like the query, otherwise we fall through.
   strict: boolean;
+  // Name in the node's /v4/info sourceManagers.
+  manager: string;
 };
 
 export const SOURCES: Record<string, SourceDef> = {
-  soundcloud:    { id: 'soundcloud',    prefix: 'scsearch:',  key: 'soundcloud', strict: true },
-  bandcamp:      { id: 'bandcamp',      prefix: 'bcsearch:',  key: 'bandcamp',   strict: true },
-  deezer:        { id: 'deezer',        prefix: 'dzsearch:',  key: 'deezer',     strict: true },
-  jiosaavn:      { id: 'jiosaavn',      prefix: 'jssearch:',  key: 'jiosaavn',   strict: true },
-  youtube_music: { id: 'youtube_music', prefix: 'ytmsearch:', key: 'youtube',    strict: false },
-  youtube:       { id: 'youtube',       prefix: 'ytsearch:',  key: 'youtube',    strict: false },
+  soundcloud:    { id: 'soundcloud',    prefix: 'scsearch:',  key: 'soundcloud', strict: true, manager: 'soundcloud' },
+  bandcamp:      { id: 'bandcamp',      prefix: 'bcsearch:',  key: 'bandcamp',   strict: true, manager: 'bandcamp' },
+  deezer:        { id: 'deezer',        prefix: 'dzsearch:',  key: 'deezer',     strict: true, manager: 'deezer' },
+  // NodeLink only. Free full-length streams (mp3), good for Western/K-pop, weak for mixed Thai queries.
+  audiomack:     { id: 'audiomack',     prefix: 'admsearch:', key: 'audiomack',  strict: true, manager: 'audiomack' },
+  jiosaavn:      { id: 'jiosaavn',      prefix: 'jssearch:',  key: 'jiosaavn',   strict: true, manager: 'jiosaavn' },
+  youtube_music: { id: 'youtube_music', prefix: 'ytmsearch:', key: 'youtube',    strict: false, manager: 'youtube' },
+  youtube:       { id: 'youtube',       prefix: 'ytsearch:',  key: 'youtube',    strict: false, manager: 'youtube' },
 };
 
 export type MusicConfig = {
@@ -44,7 +48,7 @@ const num = (v: string | undefined, def: number) => {
 function fromEnv(): MusicConfig {
   return {
     // YouTube is last on purpose. See handoff-music-bot.md section 3.
-    order: list(Env('MUSIC_SOURCE_ORDER'), ['soundcloud', 'youtube_music', 'youtube']),
+    order: list(Env('MUSIC_SOURCE_ORDER'), ['soundcloud', 'audiomack', 'youtube_music', 'youtube']),
     disabled: list(Env('MUSIC_SOURCE_DISABLED'), []),
     autocompleteOrder: list(Env('MUSIC_AUTOCOMPLETE_ORDER'), ['soundcloud', 'youtube_music']),
     negativeTtlMs: num(Env('MUSIC_NEGATIVE_TTL_MS'), 30 * 60_000),

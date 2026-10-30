@@ -1,11 +1,12 @@
 import { Client } from "discord.js";
-import { Connectors, Constants, NodeOption } from "shoukaku";
-import { findAlternative, recordPlayback } from "./music/resolver.js";
+import { Connectors, Constants, Node, NodeOption, Track } from "shoukaku";
+import { findAlternative, portTrack, recordPlayback } from "./music/resolver.js";
 import Env from "./utils/env.js";
 import chalk from "chalk";
 import { Kazagumo, Plugins } from "kazagumo";
 import { sendPStatus } from "./utils/messages.js";
 import { savePlayers } from "./utils/function.js";
+import { musicNodes, nodeTiers, youtubeDownNodes } from "./music/nodes.js";
 
 
 export default class KazagumoManager {
@@ -35,24 +36,33 @@ export default class KazagumoManager {
       //   auth: Env('LAVALINK_PASS_SG') || 'youshallnotpass',
       //   secure: Env('LAVALINK_SECURE_SG')?.toLowerCase() == 'true',
       // },
-      ...(Env('NODELINK_HOST') ? [{
-        name: 'NODELINK',
-        url: Env('NODELINK_HOST') || '',
-        auth: Env('NODELINK_PASS') || 'youshallnotpass',
-        secure: Env('NODELINK_SECURE')?.toLowerCase() == 'true',
-      }] : []),
-      {
-        name: 'LAVALINK',
-        url: Env('LAVALINK_HOST') || '',
-        auth: Env('LAVALINK_PASS') || 'youshallnotpass',
-        secure: Env('LAVALINK_SECURE')?.toLowerCase() == 'true',
-      },
+      ...musicNodes().map(n => ({ name: n.name, url: n.url, auth: n.auth, secure: n.secure })),
     ];
-    // First connected node in this list wins. Swap to "LAVALINK,NODELINK" if NodeLink misbehaves.
-    const priority = (Env('MUSIC_NODE_PRIORITY') || 'NODELINK,LAVALINK').split(',').map(s => s.trim());
-    const rank = (name: string) => { const i = priority.indexOf(name); return i < 0 ? priority.length : i; };
+    // Load balance: the first tier with a connected node wins; inside it the node with the fewest
+    // players (ties: Shoukaku penalties). Nodes whose YouTube is failing (sidecar) are skipped while
+    // another node in reach still has it working.
+    const tiers = nodeTiers();
+    const playersOn = (name: string) => [...(shoukakuRef?.players.values() ?? [])].filter(p => p.node.name === name).length;
+    let shoukakuRef: { players: Map<string, { node: { name: string } }> } | undefined;
+    const pickNode = <N extends { name: string; state: number; penalties: number }>(nodes: Map<string, N>): N | undefined => {
+      const connected = [...nodes.values()].filter(n => n.state === Constants.State.CONNECTED);
+      const ytDown = youtubeDownNodes();
+      const ordered = [...tiers, connected.map(n => n.name).filter(n => !tiers.flat().includes(n))];
+      const byLoad = (a: N, b: N) => playersOn(a.name) - playersOn(b.name) || a.penalties - b.penalties;
+      for (const preferHealthy of [true, false]) {
+        for (const tier of ordered) {
+          const cands = connected.filter(n => tier.includes(n.name) && (!preferHealthy || !ytDown.has(n.name)));
+          if (cands.length) return cands.sort(byLoad)[0];
+        }
+      }
+      return undefined;
+    };
     const kazagumo = new Kazagumo({
       defaultSearchEngine: "youtube_music",
+      // Kazagumo re-searches "author - title" before playing any track whose sourceName is not in its
+      // own list (NodeLink's "ytmusic", "audiomack", ...). That can swap the song for another upload
+      // and costs a YouTube request per play. Our tracks come from the node already encoded: play them as is.
+      trackResolver: async function (this: { track?: string }) { return !!this.track; },
       send: (guildId, payload)=>{
           const guild = client.guilds.cache.get(guildId);
           if(guild)guild.shard.send(payload);
@@ -63,17 +73,45 @@ export default class KazagumoManager {
       reconnectTries: 10,
       reconnectInterval: 5,
       restTimeout: 20,
-      nodeResolver: (nodes) => [...nodes.values()]
-        .filter(n => n.state === Constants.State.CONNECTED)
-        .sort((a, b) => rank(a.name) - rank(b.name) || a.penalties - b.penalties)
-        .shift(),
+      nodeResolver: (nodes) => pickNode(nodes),
     });
+    shoukakuRef = kazagumo.shoukaku as unknown as typeof shoukakuRef;
     kazagumo.nodes = Nodes;
 
     kazagumo.shoukaku.on('ready', (name) => console.log(headS, `Node ${chalk.bold(name)} is ready!`));
     kazagumo.shoukaku.on('error', (name, error) => console.error(headSE, `Node ${chalk.bold(name)} error:`, error.message));
     kazagumo.shoukaku.on('disconnect', (name, count) => console.error(headSE, `Node ${chalk.bold(name)} disconnected: ${count}`));
     kazagumo.shoukaku.on('reconnecting', (name, reconnectsLeft, reconnectInterval) => console.debug(headSD, `Node ${chalk.bold(name)} reconnecting in ${reconnectInterval}s`, chalk.yellow(`(${reconnectsLeft})`)));
+    // Shoukaku's moveOnDisconnect does not work when a node dies: Player.move() first calls
+    // destroyPlayer on the dead node, that request fails and the player stays on the dead node.
+    // So move players ourselves as soon as the socket closes. Encoded tracks are identical on
+    // NodeLink and Lavalink, so the same track resumes at the same position on the other node.
+    kazagumo.shoukaku.on('close', async (name) => {
+      // 'close' fires before Shoukaku marks the node as disconnected, so exclude it by name.
+      const others = new Map([...kazagumo.shoukaku.nodes].filter(([n]) => n !== name));
+      const target = kazagumo.shoukaku.options.nodeResolver(others);
+      if (!target) return;
+      for (const p of kazagumo.players.values()) {
+        const sp = p.shoukaku;
+        if (sp.node.name !== name) continue;
+        try {
+          sp.node = target;
+          // Same song in a form the new node can decode (NodeLink-only sources fail on Lavalink).
+          const current = p.queue.current;
+          const raw = current ? (current.getRaw() as { _raw?: Track })._raw : undefined;
+          const ported = raw ? await portTrack(kazagumo, raw, target as unknown as Node) : null;
+          if (ported && ported.encoded !== sp.track) {
+            const position = sp.position;
+            await sp.update({ ...sp.data.playerOptions, track: { encoded: ported.encoded }, position });
+          } else {
+            await sp.resume();
+          }
+          console.log(headS, `Moved player ${chalk.bold(p.guildId)} from ${chalk.bold(name)} to ${chalk.bold(target.name)}`);
+        } catch (err) {
+          console.error(headSE, `Move ${p.guildId} to ${target.name} failed:`, (err as Error).message);
+        }
+      }
+    });
 
     kazagumo.on('playerCreate', async(p)=>{
       console.log(headK, `Player was created: ${chalk.bold(p.guildId)}`);
@@ -97,6 +135,16 @@ export default class KazagumoManager {
       const error = (data as { exception?: { message?: string } })?.exception?.message || 'unknown';
       console.error(headKE, `Track failed in ${chalk.bold(p.guildId)}: ${track?.title} (${track?.sourceName}):`, error);
       if(!track)return;
+      // NodeLink sometimes misses the voice-ready event when a track is sent right after joining
+      // ("playerStateChange timed out"). Nothing is wrong with the song: play it again once, same source.
+      if(/playerStateChange timed out|Voice playback state timed out/i.test(error) && !(track as { voiceRetry?: boolean }).voiceRetry){
+        (track as { voiceRetry?: boolean }).voiceRetry = true;
+        console.warn(headKE, `Voice start timeout in ${chalk.bold(p.guildId)}, replaying ${track.title}`);
+        p.recovering = true;
+        try{ p.queue.unshift(track); if(!p.playing)await p.play(); }catch(err){ console.error(headKE, 'Replay error:', err); }
+        finally{ p.recovering = false; };
+        return;
+      }
       recordPlayback(track.sourceName, error);
       // One retry per song, on a different source.
       if((track as { altRetry?: boolean }).altRetry)return;

@@ -5,7 +5,7 @@
 //   node sidecar/voiceprobe.mjs <guildId> <voiceChannelId> [seconds] < queries.txt
 //   node sidecar/voiceprobe.mjs <guildId> <voiceChannelId> 10 "ytsearch:lisa money" "scsearch:lofi"
 //
-// Nodes come from NODELINK_* / LAVALINK_* in ../.env (or PROBE_NODES='[{name,url,auth}]').
+// Nodes come from MUSIC_NODES in ../.env (or PROBE_NODES='[{name,url,auth}]').
 // Stop the dev bot first if it uses the same token and guild, two sessions fight over voice.
 import { Client, GatewayIntentBits } from 'discord.js';
 import { Shoukaku, Connectors } from 'shoukaku';
@@ -22,10 +22,9 @@ if (!guildId || !channelId) { console.error('usage: voiceprobe.mjs <guildId> <vo
 const seconds = Number(secArg) || 10;
 const queries = rest.length ? rest : readFileSync(0, 'utf8').split('\n').map(s => s.trim()).filter(s => s && !s.startsWith('#'));
 
-const nodes = process.env.PROBE_NODES ? JSON.parse(process.env.PROBE_NODES) : [
-  env('NODELINK_HOST') && { name: 'NODELINK', url: env('NODELINK_HOST'), auth: env('NODELINK_PASS') },
-  env('LAVALINK_HOST') && { name: 'LAVALINK', url: env('LAVALINK_HOST'), auth: env('LAVALINK_PASS') },
-].filter(Boolean);
+const nodes = process.env.PROBE_NODES ? JSON.parse(process.env.PROBE_NODES)
+  : (env('MUSIC_NODES') || 'NODELINK,LAVALINK').split(',').map(s => s.trim()).filter(Boolean)
+    .map(name => ({ name, url: env(`${name}_HOST`), auth: env(`${name}_PASS`) })).filter(n => n.url);
 
 let target = nodes[0].name;
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildVoiceStates] });
@@ -37,8 +36,9 @@ shoukaku.on('error', (name, e) => console.error(`[${name}] error: ${e.message}`)
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-async function probe(nodeName, query) {
-  const node = shoukaku.nodes.get(nodeName);
+// One voice connection per node, tracks played back to back like a real queue.
+// Rejoining between tracks tests Discord voice reconnects, not the source.
+async function probe(node, player, state, query) {
   const t0 = Date.now();
   const res = await node.rest.resolve(query).catch(e => ({ loadType: 'error', data: { message: e.message } }));
   const track = res?.loadType === 'track' ? res.data : res?.loadType === 'search' ? res.data[0]
@@ -46,39 +46,48 @@ async function probe(nodeName, query) {
   if (!track) return { ok: false, stage: 'load', msg: res?.data?.message || res?.loadType || 'no result' };
   const loadMs = Date.now() - t0;
 
-  target = nodeName;
-  const player = await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true });
-  let error = null, started = 0, pos = 0;
-  player.on('exception', (e) => { error = e.exception?.message || 'exception'; });
-  player.on('stuck', () => { error = error || 'stuck'; });
-  player.on('start', () => { started = Date.now(); });
-  player.on('update', (u) => { pos = u.state?.position ?? pos; });
+  Object.assign(state, { error: null, started: 0 });
   const t1 = Date.now();
   await player.playTrack({ track: { encoded: track.encoded } });
   const until = Date.now() + seconds * 1000;
-  while (Date.now() < until && !error) await sleep(500);
+  while (Date.now() < until && !state.error) await sleep(500);
   // Ask the node directly, update events are only every few seconds.
   const live = await node.rest.getPlayer(guildId).catch(() => null);
-  pos = live?.state?.position ?? pos;
-  await shoukaku.leaveVoiceChannel(guildId);
-  await sleep(1500);
+  const pos = live?.state?.position ?? 0;
+  await player.stopTrack().catch(() => {});
+  await sleep(500);
   const info = track.info;
   return {
-    ok: !error && pos >= (seconds - 4) * 1000,
-    stage: error ? 'play' : 'ok', msg: error || '',
+    ok: !state.error && pos >= (seconds - 4) * 1000,
+    stage: state.error ? 'play' : 'ok',
+    msg: state.error || (pos ? '' : `no progress, voice connected=${live?.state?.connected} ping=${live?.state?.ping}`),
     title: `${info.sourceName}:${info.identifier} ${info.title}`.slice(0, 70),
-    loadMs, startMs: started ? started - t1 : null, posMs: pos,
+    loadMs, startMs: state.started ? state.started - t1 : null, posMs: pos,
   };
 }
 
 client.once('clientReady', async () => {
   await sleep(3000); // nodes connect
   const results = [];
-  for (const q of queries) for (const n of nodes) {
-    if (!shoukaku.nodes.get(n.name) || shoukaku.nodes.get(n.name).state !== 1) { results.push({ node: n.name, q, ok: false, stage: 'node', msg: 'not connected' }); continue; }
-    const r = await probe(n.name, q).catch(e => ({ ok: false, stage: 'crash', msg: e.message }));
-    results.push({ node: n.name, q, ...r });
-    console.log(`${r.ok ? 'PASS' : 'FAIL'} ${n.name.padEnd(8)} ${q.padEnd(40)} ${r.stage} pos=${r.posMs ?? '-'} start=${r.startMs ?? '-'}ms load=${r.loadMs ?? '-'}ms ${r.title || ''} ${r.msg || ''}`);
+  const log = (r) => {
+    results.push(r);
+    console.log(`${r.ok ? 'PASS' : 'FAIL'} ${r.node.padEnd(8)} ${r.q.padEnd(40)} ${r.stage} pos=${r.posMs ?? '-'} start=${r.startMs ?? '-'}ms load=${r.loadMs ?? '-'}ms ${r.title || ''} ${r.msg || ''}`);
+  };
+  for (const n of nodes) {
+    const node = shoukaku.nodes.get(n.name);
+    if (!node || node.state !== 1) { for (const q of queries) log({ node: n.name, q, ok: false, stage: 'node', msg: 'not connected' }); continue; }
+    target = n.name;
+    const player = await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true });
+    const state = { error: null, started: 0 };
+    player.on('exception', (e) => { state.error = e.exception?.message || 'exception'; });
+    player.on('stuck', () => { state.error = state.error || 'stuck'; });
+    player.on('start', () => { state.started = Date.now(); });
+    for (const q of queries) {
+      const r = await probe(node, player, state, q).catch(e => ({ ok: false, stage: 'crash', msg: e.message }));
+      log({ node: n.name, q, ...r });
+    }
+    await shoukaku.leaveVoiceChannel(guildId);
+    await sleep(3000);
   }
   if (process.env.PROBE_JSON) console.log(JSON.stringify(results));
   client.destroy(); process.exit(0);

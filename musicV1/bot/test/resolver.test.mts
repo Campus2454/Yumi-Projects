@@ -35,7 +35,7 @@ assert.ok(!calls.some(c => c.startsWith('yt')));
 calls.length = 0;
 r = await R.musicSearch(kaz, 'some thai song', { userId: 'u1' });
 assert.equal(r.tracks[0].sourceName, 'youtube');
-assert.deepEqual(calls, ['scsearch:some thai song', 'ytmsearch:some thai song']);
+assert.deepEqual(calls, ['scsearch:some thai song', 'admsearch:some thai song', 'ytmsearch:some thai song']);
 
 // Preview (30s) rejected
 r = await R.musicSearch(kaz, 'preview song', { userId: 'u2' });
@@ -46,6 +46,22 @@ calls.length = 0;
 r = await R.musicSearch(kaz, 'Some Thai Song (Official Video)', { userId: 'u3' });
 assert.equal(r.fromCache, true);
 assert.equal(calls.length, 0);
+
+// YouTube URL that the node will not load directly -> search by video id, keep the exact match
+const vid = 'ff7ao5s0heQ';
+const urlCalls: string[] = [];
+const node2: any = { name: 'N2', state: 1, rest: { resolve: async (id: string) => {
+  urlCalls.push(id);
+  if (id.startsWith('https://')) return { loadType: 'error', data: { message: 'Something went wrong while looking up the track.' } };
+  if (id === `ytsearch:${vid}`) return { loadType: 'search', data: [mk('other', 'x', 'youtube'), { ...mk('the song', 'band', 'youtube'), info: { ...mk('the song', 'band', 'youtube').info, identifier: vid } }] };
+  return { loadType: 'empty', data: {} };
+} } };
+const kaz2: any = { shoukaku: { nodes: new Map([['N2', node2]]), options: { nodeResolver: (m: Map<string, any>) => [...m.values()][0] } } };
+r = await R.musicSearch(kaz2, `https://www.youtube.com/watch?v=${vid}`, { userId: 'u6' });
+assert.equal(r.type, 'TRACK');
+assert.equal(r.tracks[0].identifier, vid);
+assert.deepEqual(urlCalls, [`https://www.youtube.com/watch?v=${vid}`, `ytsearch:${vid}`]);
+assert.notEqual(B.breakerStatus().youtube?.state, 'open');
 
 // Block YouTube -> breaker opens after 2 failures -> notice + no more YouTube calls
 ytMode = 'block';

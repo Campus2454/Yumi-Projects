@@ -13,6 +13,7 @@ import { DiscordAPIError } from 'discord.js';
 import dayjs from 'dayjs';
 import { setTimeout as wait } from 'timers/promises';
 import { Buttons } from './commands/buttons.js';
+import { nodeLoginButton } from './commands/nodeLogin.js';
 import { Modals } from './commands/modalSubmit.js';
 import { SlashCommands } from './commands/slashCommands.js';
 import { Autocomplete } from './commands/autocomplete.js';
@@ -133,6 +134,7 @@ const kazagumo = new KazagumoManager(client) as Kazagumo;
     // SlashCommand
     if(i.isChatInputCommand()){ commands.slashCommands.slashCommands(i, client, kazagumo); };
     // // Button
+    if(i.isButton() && i.customId.startsWith('ytlogin:')){ nodeLoginButton(i).catch(e=>console.error('[NodeLogin]', e)); return; };
     if(i.isButton()){ commands.buttons.buttons(i, client, kazagumo); };
     // // ModalSubmit
     if(i.isModalSubmit()){ commands.modals.modals(i, client, kazagumo); };

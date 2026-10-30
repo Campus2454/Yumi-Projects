@@ -7,11 +7,21 @@ import path from "path";
 import { setTimeout as wait } from 'timers/promises';
 import { sendPStatus } from "./messages.js";
 import { MessageFlags } from "discord.js";
-import { createCanvas, loadImage } from "canvas";
+import { createCanvas, loadImage, registerFont } from "canvas";
+
+// The server has no Thai font, so Thai titles rendered as boxes. Bundle Noto Sans Thai (OFL) and
+// list it after Sans: Pango takes Latin from Sans and falls back to it for Thai glyphs.
+const FONT_DIR = path.join(process.cwd(), "src/utils/fonts");
+try {
+  registerFont(path.join(FONT_DIR, "NotoSansThai-Regular.ttf"), { family: "Noto Sans Thai" });
+  registerFont(path.join(FONT_DIR, "NotoSansThai-Bold.ttf"), { family: "Noto Sans Thai", weight: "bold" });
+} catch (e) {
+  console.error("[MusicCard] Thai font not loaded:", (e as Error).message);
+}
 import { isDev, isM } from "./env.js";
-import { Player } from "shoukaku";
+import { Player, Track } from "shoukaku";
 import { User } from "discord.js";
-import { musicSearch } from "../music/resolver.js";
+import { musicSearch, portTrack } from "../music/resolver.js";
 
 const SAVE_FILE = path.join(process.cwd(), `players_${isDev ? 'dev' : isM ? 'music' : 'main'}.json`);
 
@@ -29,12 +39,33 @@ export function savePlayers(kazagumo: Kazagumo) {
       paused: player.paused,
       current: player.queue.current?.uri ?? null,
       queue: player.queue.map(t => t.uri),
+      // Exact tracks (encoded + info). Restoring from these needs no search, so a restart cannot
+      // swap the song for another version. Encoded tracks play on both NodeLink and Lavalink.
+      currentRaw: player.queue.current ? rawTrack(player.queue.current) : null,
+      queueRaw: player.queue.map(rawTrack),
       loop: player.loop,
       247: player[247] || false
     });
   }
 
   fs.writeFileSync(SAVE_FILE, JSON.stringify(data, null, 2));
+}
+
+function rawTrack(t: KazagumoTrack) {
+  return (t.getRaw() as { _raw?: unknown })._raw ?? null;
+}
+
+// Saved raw track first, URL search only for old save files.
+async function restoreTrack(kazagumo: Kazagumo, raw: unknown, uri: string | null | undefined, nodeName: string) {
+  const node = kazagumo.shoukaku.nodes.get(nodeName);
+  if (raw && typeof raw === 'object' && 'encoded' in raw && node) {
+    // The player may land on another node than the one that encoded the track.
+    const t = await portTrack(kazagumo, raw as Track, node);
+    if (t) return new KazagumoTrack(t, undefined);
+  }
+  if (!uri) return null;
+  const res = await musicSearch(kazagumo, uri, { nodeName });
+  return res.tracks[0] ?? null;
 }
 
 function loadPlayers() {
@@ -84,19 +115,15 @@ export async function restorePlayers(client: Client, kazagumo: Kazagumo) {
       player.setVolume(data.volume ?? 100);
 
       // ใส่เพลงที่กำลังเล่นก่อน
-      if (data.current) {
-        const res = await musicSearch(kazagumo, data.current, { nodeName: player.shoukaku.node.name });
-        if (res.tracks.length) {
-          player.queue.add(res.tracks[0]);
-        }
-      }
+      const nodeName = player.shoukaku.node.name;
+      const current = data.current || data.currentRaw ? await restoreTrack(kazagumo, data.currentRaw, data.current, nodeName) : null;
+      if (current) player.queue.add(current);
 
       // แล้วค่อยใส่ queue
-      for (const url of data.queue) {
-        const res = await musicSearch(kazagumo, url, { nodeName: player.shoukaku.node.name });
-        if (res.tracks.length) {
-          player.queue.add(res.tracks[0]);
-        }
+      const urls: (string | null)[] = data.queue || [];
+      for (let i = 0; i < Math.max(urls.length, data.queueRaw?.length ?? 0); i++) {
+        const t = await restoreTrack(kazagumo, data.queueRaw?.[i], urls[i], nodeName);
+        if (t) player.queue.add(t);
       }
 
       if (player.queue.size || player.queue.current) {
@@ -152,24 +179,30 @@ function drawCover(ctx:any,img:any,w:number,h:number){
   ctx.drawImage(img,x,y,img.width*scale,img.height*scale)
 }
 
-function drawWrapText(ctx:any,text:string,x:number,y:number,maxWidth:number,lineHeight:number){
-  const words = text.split(" ")
+// Wraps text into at most maxLines lines (last one ends with "…" when cut) and returns the y
+// of the next line. Breaks between words, or inside a word when it has no spaces (Thai, long titles).
+function drawWrapText(ctx:any,text:string,x:number,y:number,maxWidth:number,lineHeight:number,maxLines = Infinity){
+  const fits = (t:string) => ctx.measureText(t).width <= maxWidth
+  const lines:string[] = []
   let line = ""
-
-  for(const word of words){
-    const test = line + word + " "
-    const width = ctx.measureText(test).width
-
-    if(width > maxWidth && line){
-      ctx.fillText(line,x,y)
-      line = word + " "
-      y += lineHeight
-    }else{
-      line = test
+  for(const word of text.split(/(\s+)/)){
+    if(fits(line + word)){ line += word; continue }
+    if(line.trim()){ lines.push(line.trim()); line = "" }
+    // Word wider than the box: split by characters.
+    for(const ch of word.trimStart()){
+      if(!fits(line + ch)){ lines.push(line); line = "" }
+      line += ch
     }
   }
-
-  ctx.fillText(line,x,y)
+  if(line.trim()) lines.push(line.trim())
+  const shown = lines.slice(0, maxLines)
+  if(lines.length > shown.length){
+    let last = shown[shown.length - 1]
+    while(last && !fits(last + "…")) last = last.slice(0, -1)
+    shown[shown.length - 1] = last.trimEnd() + "…"
+  }
+  for(const l of shown){ ctx.fillText(l,x,y); y += lineHeight }
+  return y
 }
 
 const emojiCache = new Map<string, any>()
@@ -247,15 +280,11 @@ export async function drawStatus(
   }
 }
 
+// Static per track: no progress, position, volume or loop here. Those change every few seconds
+// and live in the message components instead.
 export async function createMusicCard(data:{
   track:any
-  progress:number
-  position:string
   duration:string
-  volume:number
-  loop:string
-  loopText:string
-  nextSong?:string
 }){
 
   const canvas = createCanvas(800,250)
@@ -285,50 +314,22 @@ export async function createMusicCard(data:{
 
   // title
   ctx.fillStyle = "#fff"
-  ctx.font = "bold 28px Sans"
-  drawWrapText(ctx,data.track?.title || "unknown",250,55,520,32)
+  ctx.font = "bold 28px Sans, Noto Sans Thai"
+  let y = drawWrapText(ctx,data.track?.title || "unknown",250,55,520,32,2)
 
   // author
   ctx.fillStyle = "#ccc"
-  ctx.font = "20px Sans"
-  drawWrapText(ctx,data.track?.author || "unknown",250,105,520,24)
+  ctx.font = "20px Sans, Noto Sans Thai"
+  y = drawWrapText(ctx,data.track?.author || "unknown",250,y + 2,520,24,1)
 
-  // progress bar bg
-  ctx.fillStyle = "#444"
-  ctx.beginPath()
-  ctx.roundRect(250,135,500,10,5)
-  ctx.fill()
-
-  // progress
-  // ctx.fillStyle = "#1db954"
-  ctx.fillStyle = "#fff"
-  ctx.beginPath()
-  ctx.roundRect(250,135,500 * data.progress,10,5)
-  ctx.fill()
-
-  // requester
-  ctx.fillStyle = "#fff"
-  ctx.font = "18px Sans"
-  ctx.fillText(`Requested by: ${(data.track?.requester as User)?.globalName || (data.track?.requester as User)?.username || "unknown"}`,250,175)
-
-  // status
-  ctx.font = "18px Sans"
+  // duration, then requester, below whatever height the title and author took
   ctx.fillStyle = "#ddd"
+  ctx.font = "18px Sans, Noto Sans Thai"
+  ctx.fillText(data.duration, 250, y + 8)
 
-  await drawStatus(
-    ctx,
-    {
-      position:data.position,
-      duration:data.duration,
-      volume:data.volume,
-      loop:data.loop,
-      loopText:data.loopText,
-      nextSong:data.nextSong
-    },
-    250,
-    205,
-    520
-  )
+  ctx.fillStyle = "#fff"
+  ctx.font = "18px Sans, Noto Sans Thai"
+  drawWrapText(ctx,`Requested by: ${(data.track?.requester as User)?.globalName || (data.track?.requester as User)?.username || "unknown"}`,250,y + 38,520,22,1)
 
   return canvas.toBuffer("image/png")
 }

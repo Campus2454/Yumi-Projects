@@ -22,7 +22,7 @@ export type MusicSearchOptions = {
 };
 
 // Errors that belong to one video, not to YouTube blocking us. They must not trip the breaker.
-const TRACK_SPECIFIC = /unavailable|private|age|removed|copyright|not available in your country|members only|premiere/i;
+const TRACK_SPECIFIC = /unavailable|private|age|removed|copyright|not available in your country|members only|premiere|no valid transcoding|preview url/i;
 
 export function sourceKeyOf(sourceName: string | undefined) {
   if (!sourceName) return 'unknown';
@@ -44,6 +44,25 @@ export function pickNode(kazagumo: Kazagumo, nodeName?: string): Node | undefine
   const wanted = nodeName ? nodes.get(nodeName) : undefined;
   if (wanted && wanted.state === Constants.State.CONNECTED) return wanted;
   return kazagumo.shoukaku.options.nodeResolver(nodes);
+}
+
+// Source managers each node reports in /v4/info. Lavalink and NodeLink ship different sources,
+// so a source missing on the current node is skipped instead of counted as a failure.
+const nodeSources = new Map<string, { at: number; managers: Set<string> | null }>();
+
+function refreshNodeSources(node: Node) {
+  const known = nodeSources.get(node.name);
+  if (known && Date.now() - known.at < 10 * 60_000) return;
+  nodeSources.set(node.name, { at: Date.now(), managers: known?.managers ?? null });
+  Promise.resolve().then(() => node.rest.getLavalinkInfo())
+    .then(info => { if (info?.sourceManagers) nodeSources.set(node.name, { at: Date.now(), managers: new Set(info.sourceManagers) }); })
+    .catch(() => {});
+}
+
+export function nodeSupports(node: Node, manager: string) {
+  refreshNodeSources(node);
+  const managers = nodeSources.get(node.name)?.managers;
+  return !managers || managers.has(manager);
 }
 
 type Load = { ok: true; res: LavalinkResponse | undefined } | { ok: false; error: string };
@@ -95,6 +114,54 @@ const wrap = (_kazagumo: Kazagumo, raw: Track[], requester: unknown) =>
 
 const empty = (notice?: MusicNotice): MusicSearchResult => ({ type: 'SEARCH', tracks: [], notice });
 
+function youtubeVideoId(url: string) {
+  try {
+    const u = new URL(url);
+    const id = u.hostname.endsWith('youtu.be') ? u.pathname.slice(1) : u.searchParams.get('v') || u.pathname.match(/\/(?:shorts|live|embed)\/([\w-]{11})/)?.[1];
+    return id && /^[\w-]{11}$/.test(id) ? id : null;
+  } catch { return null; }
+}
+
+// Lavalink's youtube-source loads a video URL only with non-OAuth clients, which a flagged IP gets
+// "This video requires login" for. Search uses another path and playback still goes through the
+// OAuth TV client, so searching the video id and keeping the exact match plays the same video.
+async function loadYoutubeById(node: Node, url: string): Promise<Track | null> {
+  const id = youtubeVideoId(url);
+  if (!id) return null;
+  const r = await load(node, `ytsearch:${id}`, 'youtube');
+  return r.ok ? tracksOf(r.res).tracks.find(t => t.info.identifier === id) ?? null : null;
+}
+
+async function nodeManagers(node: Node): Promise<Set<string> | null> {
+  const known = nodeSources.get(node.name)?.managers;
+  if (known) return known;
+  const info = await node.rest.getLavalinkInfo().catch(() => null);
+  if (!info?.sourceManagers) return null;
+  const managers = new Set(info.sourceManagers);
+  nodeSources.set(node.name, { at: Date.now(), managers });
+  return managers;
+}
+
+// An encoded track only decodes on a node that has its source manager. NodeLink tracks such as
+// "ytmusic", "audiomack" or SoundCloud fail on Lavalink ("Failed to decode track"), so before a
+// track moves to another node (failover, restore) turn it into a track of that node.
+export async function portTrack(kazagumo: Kazagumo, raw: Track, node: Node): Promise<Track | null> {
+  const managers = await nodeManagers(node);
+  if (!managers || managers.has(raw.info.sourceName)) return raw;
+  const id = raw.info.identifier;
+  if ((raw.info.sourceName === 'ytmusic' || raw.info.sourceName.startsWith('youtube')) && id) {
+    const t = await loadYoutubeById(node, `https://www.youtube.com/watch?v=${id}`);
+    if (t) return t;
+  }
+  if (raw.info.uri) {
+    const r = await load(node, raw.info.uri, sourceKeyOf(raw.info.sourceName));
+    const t = r.ok ? tracksOf(r.res).tracks[0] : undefined;
+    if (t) return t;
+  }
+  const res = await musicSearch(kazagumo, `${raw.info.title} ${raw.info.author?.replace(/ - Topic$/, '') ?? ''}`, { nodeName: node.name }).catch(() => null);
+  return (res?.tracks[0]?.getRaw() as { _raw?: Track } | undefined)?._raw ?? null;
+}
+
 // YouTube oEmbed is a cheap public endpoint. We only need the title to search elsewhere when YouTube is blocked.
 async function youtubeTitle(url: string) {
   try {
@@ -127,7 +194,7 @@ async function searchSources(kazagumo: Kazagumo, node: Node, queryNorm: string, 
   let notice: MusicNotice | undefined;
   for (const id of order) {
     const def = SOURCES[id];
-    if (!def || !sourceEnabled(id) || exclude.includes(def.key)) continue;
+    if (!def || !sourceEnabled(id) || exclude.includes(def.key) || !nodeSupports(node, def.manager)) continue;
     if (negativeHas(queryNorm, id)) continue;
     if (!breakerAllow(def.key)) {
       if (def.key === 'youtube') notice = 'youtube_unavailable';
@@ -157,6 +224,8 @@ async function searchSources(kazagumo: Kazagumo, node: Node, queryNorm: string, 
 const autocompleteMemo = new Map<string, { at: number; tracks: Track[] }>();
 
 async function autocomplete(kazagumo: Kazagumo, node: Node, query: string, opts: MusicSearchOptions): Promise<MusicSearchResult> {
+  // A link is loaded, not searched: "ytmsearch:https://youtu.be/..." returns unrelated songs.
+  if (/^https?:\/\//i.test(query.trim())) return musicSearch(kazagumo, query, { ...opts, kind: 'play' });
   const queryNorm = normalizeQuery(query);
   if (queryNorm.length < 2) return empty();
   const local = cacheSearchTitles(queryNorm, 5).flatMap(r => r.raw_json ? [JSON.parse(r.raw_json) as Track] : []);
@@ -197,13 +266,22 @@ export async function musicSearch(kazagumo: Kazagumo, query: string, opts: Music
     const key = urlSourceKey(queryNorm);
     if (!exclude.includes(key) && breakerAllow(key) && !(key === 'youtube' && !sourceEnabled('youtube'))) {
       const r = await load(node, queryNorm, key);
-      report(key, r);
+      // A failed YouTube URL load is reported only after the search-by-id fallback below also fails.
+      if (r.ok || key !== 'youtube') report(key, r);
       if (r.ok) {
         const res = tracksOf(r.res);
         if (res.type === 'TRACK' && res.tracks[0]) cachePut(queryNorm, res.tracks[0].info.sourceName, node.name, res.tracks[0]);
         return { ...res, tracks: wrap(kazagumo, res.tracks, opts.requester) };
       }
       console.warn(head, `URL load failed (${key}):`, r.error);
+      if (key === 'youtube' && !TRACK_SPECIFIC.test(r.error)) {
+        const t = await loadYoutubeById(node, queryNorm);
+        if (t) {
+          cachePut(queryNorm, t.info.sourceName, node.name, t);
+          return { type: 'TRACK', tracks: wrap(kazagumo, [t], opts.requester) };
+        }
+      }
+      if (key === 'youtube') report(key, r);
     }
     if (key !== 'youtube') return empty();
     // YouTube link while YouTube is down: find the same song elsewhere by title.

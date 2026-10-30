@@ -4,12 +4,12 @@
 #
 #   cp .env.example .env && docker compose up -d
 services:
-  lavalink:
+  lavalink: &lavalink
     image: ghcr.io/lavalink-devs/lavalink:${LAVALINK_TAG:-4.2.2}
     container_name: yumi_lavalink
     restart: unless-stopped
     mem_limit: ${LAVALINK_MEM_LIMIT:-1g}
-    environment:
+    environment: &lavalink_env
       _JAVA_OPTIONS: -Xmx${LAVALINK_HEAP:-768m}
       SERVER_PORT: "2333"
       LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:?set LAVALINK_PASSWORD}
@@ -23,11 +23,14 @@ services:
       PLUGINS_YOUTUBE_POT_VISITORDATA: ${YT_VISITOR_DATA:-}
       PLUGINS_YOUTUBE_REMOTECIPHER_URL: ${YT_CIPHER_URL:-http://yt-cipher:8001}
       PLUGINS_YOUTUBE_REMOTECIPHER_USERAGENT: yumi
+      LOGGING_LEVEL_DEV_LAVALINK_YOUTUBE: ${YT_LOG_LEVEL:-INFO}
+      LOGGING_LEVEL_MOE_KYOKOBOT_KOE: ${KOE_LOG_LEVEL:-INFO}
     volumes:
       - ./application.yml:/opt/Lavalink/application.yml:ro
       - ./plugins:/opt/Lavalink/plugins
     ports:
-      - "${LAVALINK_PORT:-2333}:2333"
+      # Loopback only: the bots run on this host. Set LAVALINK_BIND=0.0.0.0 to serve other hosts.
+      - "${LAVALINK_BIND:-127.0.0.1}:${LAVALINK_PORT:-2333}:2333"
     # For IPv6 rotation uncomment, remove `ports`, set YT_CIPHER_URL=http://127.0.0.1:8002.
     # network_mode: host
     depends_on:
@@ -39,10 +42,23 @@ services:
       retries: 3
       start_period: 60s
 
+  # Second Lavalink with its own burner account (YT_REFRESH_TOKEN_2). Shares plugins/ and yt-cipher.
+  lavalink2:
+    <<: *lavalink
+    container_name: yumi_lavalink2
+    ports:
+      - "${LAVALINK_BIND:-127.0.0.1}:${LAVALINK2_PORT:-2334}:2333"
+    environment:
+      <<: *lavalink_env
+      PLUGINS_YOUTUBE_OAUTH_ENABLED: "true"
+      PLUGINS_YOUTUBE_OAUTH_REFRESHTOKEN: ${YT_REFRESH_TOKEN_2:-}
+      PLUGINS_YOUTUBE_OAUTH_SKIPINITIALIZATION: "true"
+
   yt-cipher:
     image: ghcr.io/kikkia/yt-cipher@${YT_CIPHER_DIGEST:-sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449}
     container_name: yumi_lavalink_cipher
     restart: unless-stopped
+    mem_limit: ${YT_CIPHER_MEM_LIMIT:-512m}
     environment:
       - OVERRIDE_PLAYER_VARIANT=IAS
     ports:

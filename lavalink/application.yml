@@ -14,7 +14,8 @@ lavalink:
     sources:
       # Built-in YouTube source is dead. The plugin replaces it.
       youtube: false
-      soundcloud: true
+      # lavaplayer cannot play SoundCloud AAC-HLS ("Did not detect any supported formats"). NodeLink serves SoundCloud.
+      soundcloud: false
       bandcamp: true
       twitch: false
       vimeo: false
@@ -32,7 +33,8 @@ lavalink:
       rotation: true
       channelMix: true
       lowPass: true
-    bufferDurationMs: 400
+    # 0 disables JDA-NAS. Its native udpqueue sends no audio on this VPS (position stays 0, no error).
+    bufferDurationMs: 0
     frameBufferDurationMs: 5000
     opusEncodingQuality: 10
     resamplingQuality: LOW
@@ -41,7 +43,7 @@ lavalink:
     youtubePlaylistLoadLimit: 6
     playerUpdateInterval: 5
     youtubeSearchEnabled: true
-    soundcloudSearchEnabled: true
+    soundcloudSearchEnabled: false
     gc-warnings: true
     timeouts:
       # yt-cipher answers can be slow on a cold player script.

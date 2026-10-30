@@ -8,17 +8,23 @@
 # GitHub branches, so a rebuild of the same ref can still pull newer deps. Keep the built image
 # (tag below) and only rebuild on purpose.
 services:
-  nodelink:
+  nodelink: &nodelink
+    # Base image yumi/nodelink:<NODELINK_TAG> is built from the pinned git ref (see Dockerfile.patch),
+    # then our patches (patches/apply.mjs) go on top.
     build:
-      context: https://github.com/PerformanC/NodeLink.git#${NODELINK_REF:-cdb02c6814fd8abe37f1d02955770e51b1414d06}
-    image: yumi/nodelink:${NODELINK_TAG:-v3.9.0}
+      context: .
+      dockerfile: Dockerfile.patch
+      args:
+        BASE: yumi/nodelink:${NODELINK_TAG:-v3.9.0}
+    image: yumi/nodelink:${NODELINK_TAG:-v3.9.0}-patched
     container_name: yumi_nodelink
     restart: unless-stopped
     # Hard cap so a leak restarts the container instead of starving the host.
     mem_limit: ${NODELINK_MEM_LIMIT:-1536m}
     ports:
-      - "${NODELINK_PORT:-3000}:3000"
-    environment:
+      # Loopback only: the bots run on this host. Set NODELINK_BIND=0.0.0.0 to serve other hosts.
+      - "${NODELINK_BIND:-127.0.0.1}:${NODELINK_PORT:-3000}:3000"
+    environment: &nodelink_env
       NODELINK_SERVER_HOST: "0.0.0.0"
       NODELINK_SERVER_PORT: "3000"
       NODELINK_SERVER_PASSWORD: ${NODELINK_PASSWORD:?set NODELINK_PASSWORD}
@@ -67,11 +73,24 @@ services:
       retries: 3
       start_period: 40s
 
+  # Second NodeLink: same image and settings, its own burner account (YT_REFRESH_TOKENS_2).
+  # When one burner gets banned the other keeps YouTube working while a new one is logged in.
+  # Both share the yt-cipher below.
+  nodelink2:
+    <<: *nodelink
+    container_name: yumi_nodelink2
+    ports:
+      - "${NODELINK_BIND:-127.0.0.1}:${NODELINK2_PORT:-3002}:3000"
+    environment:
+      <<: *nodelink_env
+      NODELINK_SOURCES_YOUTUBE_CLIENTS_SETTINGS_TV_REFRESHTOKEN: ${YT_REFRESH_TOKENS_2:-[""]}
+
   yt-cipher:
     # Only published tag is `master`, so pin by digest. Update digest on purpose.
     image: ghcr.io/kikkia/yt-cipher@${YT_CIPHER_DIGEST:-sha256:4c5ec381ff57336cfc24822d2b526a5ad7cd0171f61065a1bbc87bb736842449}
     container_name: yumi_nodelink_cipher
     restart: unless-stopped
+    mem_limit: ${YT_CIPHER_MEM_LIMIT:-512m}
     environment:
       - OVERRIDE_PLAYER_VARIANT=IAS
     # Bound to loopback only, so no API_TOKEN needed. NodeLink reaches it by service name
