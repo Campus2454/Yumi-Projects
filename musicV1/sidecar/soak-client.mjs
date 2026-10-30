@@ -63,6 +63,8 @@ async function join() {
     try { return await shoukaku.joinVoiceChannel({ guildId, channelId, shardId: 0, deaf: true }); }
     catch (e) {
       log(`join failed (${i}): ${e.message}`);
+      // A stuck gateway session never gets a voice server again: start over (pm2 restarts us).
+      if (i >= 3) { log('giving up on this session, exiting for a fresh one'); client.destroy(); process.exit(1); }
       await shoukaku.leaveVoiceChannel(guildId).catch(() => {});
       await sleep(Math.min(60_000, 5000 * i));
     }
