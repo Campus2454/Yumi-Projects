@@ -11,7 +11,7 @@ import { DEFAULT_PREFS, isLang, isTimeZone, prefs, t, type Prefs } from './i18n.
  *   active   -> ยืนยันแล้ว ได้รับอีเมลทั้งหมด
  *   revoked  -> กดยกเลิกแล้ว ไม่ได้รับอีกจนกว่าจะสมัครใหม่
  */
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3, connectionTimeoutMillis: 5_000 });
+export const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, max: 3, connectionTimeoutMillis: 5_000 });
 
 const PUBLIC_URL = (process.env.STATUS_PAGE_URL || '').replace(/\/$/, '');
 const TOKEN_TTL_MS = 48 * 3_600_000;

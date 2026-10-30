@@ -2,7 +2,6 @@ import type { StatusData } from 'global/types';
 import { formatDataSize } from 'global/common-functions';
 import { RANGE_LIST, type Banner, type Brief, type Range, type Report, type SeriesPoint } from './history.js';
 import { COLORS, UI_BODY, UI_CSS, UI_SCRIPT, seriesLine, svgChart } from './chart.js';
-import { SUB_CSS, SUB_JS, SUB_MODAL } from './subscribe-modal.js';
 import { displayName, fmtDateTh, fmtDayTh, fmtDurTh, fmtPct, stateTh } from './format.js';
 import { localeOf, prefs, t, tMany, tzLabel } from './i18n.js';
 import { SET_CSS, firstVisitScript, gearButton, settingsModal, settingsScript } from './settings-ui.js';
@@ -145,7 +144,7 @@ a{color:inherit;text-decoration:none}button{font:inherit}
 .strip i{cursor:pointer;transition:filter .15s}
 .strip i:hover{filter:brightness(1.35)}
 .strip i.load{background:var(--load)}
-${UI_CSS}${SUB_CSS}${SET_CSS}
+${UI_CSS}${SET_CSS}
 .foot{margin-top:28px;text-align:center;color:var(--dim);font-size:.82rem;font-weight:300}
 @media (max-width:720px){
 	.svc{grid-template-columns:1fr auto;gap:14px}.svc .bars{grid-column:1/-1;order:3}
@@ -209,11 +208,9 @@ ${main}
 </main>
 <p class="foot">${esc(t('footer_tz', { tz: tzLabel() }))}</p>
 </div>
-${SUB_MODAL()}
-${settingsModal(prefs().sub ?? null)}
+${settingsModal(prefs().user ?? null)}
 ${UI_BODY}
 <script>${script()}</script>
-<script>${SUB_JS()}</script>
 <script>${settingsScript()}</script>
 <script>${UI_SCRIPT()}</script>
 </body>

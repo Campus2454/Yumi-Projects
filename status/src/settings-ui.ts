@@ -66,11 +66,25 @@ html{scrollbar-color:rgba(255,255,255,.18) transparent}
 .setm .link{border:0;background:none;padding:0;color:var(--muted,#b99a97);font:inherit;font-size:.85rem;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .setm .link:hover{color:var(--ink,#fff3f1)}
 .setm.busy .box{opacity:.6;pointer-events:none}
+.linkbtn{background:none;border:0;padding:0;color:var(--muted);text-decoration:underline;text-underline-offset:4px;font:inherit;cursor:pointer}
+.linkbtn:hover{color:var(--ink)}
+.setm .mail .row2.in{margin-top:10px;padding:10px 0 0}
+.lgm .box{max-width:420px}
+.lgm .lgs{margin-top:18px;display:grid;gap:10px}
+.lgm .lgs[hidden]{display:none}
+.lgm label{font-size:.88rem;color:var(--muted,#b99a97)}
+.lgm .save{width:100%;padding:13px}
+.lgm .save:disabled{opacity:.6;cursor:default}
+.lgm .code{font-size:1.5rem;letter-spacing:.5em;text-align:center;font-variant-numeric:tabular-nums}
+.lgm .lgs .foot2{margin-top:4px}
+.lgm .link:disabled{text-decoration:none;opacity:.7;cursor:default}
+.setm .msg{margin:12px 0 0;font-size:.9rem;min-height:1.2em}
+.setm .msg.ok{color:var(--ok,#3ddc97)}.setm .msg.err{color:var(--down,#ff5a5f)}
 html.calm *,html.calm *::before,html.calm *::after{animation:none!important;transition:none!important}
 `;
 
-/** ข้อมูลการรับอีเมลของอุปกรณ์นี้ (มาจาก cookie ys_sub) */
-export type SubInfo = { email: string } | null;
+/** ผู้ใช้ที่เข้าสู่ระบบอยู่ */
+export type SubInfo = { email: string; subscribed: boolean } | null;
 
 const maskEmail = (e: string) => {
 	const [u, d] = e.split('@');
@@ -84,9 +98,10 @@ export function settingsModal(sub: SubInfo = null): string {
 		`<button type="button" data-h12="${v}" class="${(p.h12 === null ? 'auto' : p.h12 ? '12' : '24') === v ? 'on' : ''}">${esc(t(k))}</button>`;
 	const sw = (key: string, on: boolean) => `<button type="button" class="sw${on ? ' on' : ''}" data-sw="${key}" role="switch" aria-checked="${on}"></button>`;
 	const mail = sub
-		? `<div class="mail">${esc(t('set_email_on', { email: maskEmail(sub.email) }))}<small>${esc(t('set_email_note'))}</small>
-			<div class="act"><button type="button" class="ghost" data-unsub>${esc(t('set_unsub'))}</button></div><p class="msg" id="setmsg" role="status"></p></div>`
-		: `<div class="mail">${esc(t('set_email_none'))}<div class="act"><a class="ghost" href="/?subscribe=1" data-sub-open data-set-close style="text-decoration:none">${esc(t('link_subscribe'))}</a></div></div>`;
+		? `<div class="mail">${esc(t('acc_as', { email: maskEmail(sub.email) }))}<small>${esc(t('acc_sync'))}</small>
+			<div class="row2 in"><div>${esc(t('acc_mail'))}<small>${esc(t('acc_mail_note'))}</small></div>${sw('mail', sub.subscribed)}</div>
+			<div class="act"><button type="button" class="link" data-logout>${esc(t('acc_logout'))}</button></div></div>`
+		: `<div class="mail">${esc(t('acc_out_note'))}<div class="act"><button type="button" class="ghost" data-login-open>${esc(t('acc_login'))}</button></div></div>`;
 	return `
 <div class="setm" id="setm" aria-hidden="true">
 	<div class="box" role="dialog" aria-modal="true" aria-labelledby="sett">
@@ -104,8 +119,28 @@ export function settingsModal(sub: SubInfo = null): string {
 		<div class="sec">
 			<div class="row2"><div>${esc(t('set_refresh'))}<small>${esc(t('set_refresh_note'))}</small></div>${sw('refresh', p.refresh)}</div>
 			<div class="row2"><div>${esc(t('set_calm'))}</div>${sw('calm', p.calm)}</div></div>
-		<div class="sec"><span class="lb">${esc(t('set_email'))}</span>${mail}</div>
+		<div class="sec"><span class="lb">${esc(t('acc_title'))}</span>${mail}</div>
 		<div class="foot2"><span class="note">${esc(t('set_auto_saved'))}</span><button type="button" class="link" data-reset>${esc(t('set_reset'))}</button></div>
+	</div>
+</div>
+<div class="setm lgm" id="lgm" aria-hidden="true">
+	<div class="box" role="dialog" aria-modal="true" aria-labelledby="lgt">
+		<button class="x" type="button" data-lg-close aria-label="${esc(t('close'))}"><svg viewBox="0 0 24 24"><path d="M7 7l10 10M17 7L7 17"/></svg></button>
+		<h3 id="lgt">${esc(t('acc_login'))}</h3>
+		<p class="lead" id="lglead" data-plain="${esc(t('lg_lead'))}" data-sub="${esc(t('lg_sub_lead'))}">${esc(t('lg_lead'))}</p>
+		<form class="lgs" id="lg1" novalidate>
+			<label for="lgemail">${esc(t('sub_label'))}</label>
+			<input class="srch" id="lgemail" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" maxlength="254" required>
+			<button class="save" type="submit">${esc(t('lg_send'))}</button>
+		</form>
+		<form class="lgs" id="lg2" novalidate hidden>
+			<p class="lead" id="lgsent"></p>
+			<label for="lgcode">${esc(t('lg_code'))}</label>
+			<input class="srch code" id="lgcode" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="••••••" required>
+			<button class="save" type="submit">${esc(t('lg_verify'))}</button>
+			<div class="foot2"><button type="button" class="link" data-lg-back>${esc(t('lg_change'))}</button><button type="button" class="link" data-lg-resend></button></div>
+		</form>
+		<p class="msg" id="lgmsg" role="status"></p>
 	</div>
 </div>`;
 }
@@ -126,32 +161,35 @@ if(!sessionStorage.getItem('ys_init')){sessionStorage.setItem('ys_init','1');win
 
 /** ตัวจัดการหน้าต่างตั้งค่า */
 export function settingsScript(): string {
-	const s = JSON.stringify(tMany(['set_tz_auto', 'set_no_match', 'set_unsub_done', 'sub_error']));
+	const s = JSON.stringify(tMany(['set_tz_auto', 'set_no_match', 'sub_error', 'sub_conn', 'sub_need', 'sub_invalid', 'sub_sending', 'lg_sent', 'lg_resend', 'lg_resend_in', 'lg_bad']));
+	const logged = !!prefs().user;
 	return `(function(){
 var m=document.getElementById('setm');if(!m)return;
-var S=${s},last=null,box=m.querySelector('.box');
+var S=${s},LOGGED=${logged},last=null,box=m.querySelector('.box');
 var y='; path=/; max-age=31536000; samesite=lax';
 function ck(k){var r=document.cookie.match(new RegExp('(?:^|; )'+k+'=([^;]*)'));return r?decodeURIComponent(r[1]):null;}
 function open(){last=document.activeElement;m.classList.add('open');m.setAttribute('aria-hidden','false');renderTz(tzq.value);}
 function close(){m.classList.remove('open');m.setAttribute('aria-hidden','true');if(last&&last.focus)last.focus();}
 document.addEventListener('click',function(e){var t=e.target;if(!t||!t.closest)return;
 	if(t.closest('[data-set-open]')){e.preventDefault();open();return;}
+	if(t.closest('[data-sub-open]')){e.preventDefault();subscribe();return;}
 	if(t===m||t.closest('[data-set-close]'))close();});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&m.classList.contains('open'))close();});
-/* เปลี่ยนแล้วมีผลทันที: เขียน cookie แล้วโหลดหน้าใหม่ และเปิดหน้าต่างนี้ค้างไว้ที่ตำแหน่งเดิม */
-function apply(k,v,mail){
+function post(u,b){return fetch(u,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(b||{})});}
+function reopen(){try{sessionStorage.setItem('ys_reopen',JSON.stringify({b:box.scrollTop,l:langs.scrollTop,t:tzs.scrollTop}));}catch(e){}}
+/* ส่งเฉพาะค่าที่เปลี่ยนไปบันทึกในบัญชี (ถ้าเข้าสู่ระบบอยู่) ค่าอื่นในบัญชีคงเดิม */
+function sync(k,v){if(!LOGGED)return Promise.resolve();var b={},f=k.slice(3);
+	b[f]=(f==='refresh'||f==='calm')?v==='1':v;return post('/api/prefs',b).catch(function(){});}
+/* เปลี่ยนแล้วมีผลทันที: เขียน cookie (และบัญชี) แล้วโหลดหน้าใหม่ เปิดหน้าต่างนี้ค้างไว้ที่ตำแหน่งเดิม */
+function apply(k,v){
 	document.cookie=k+'='+encodeURIComponent(v)+y;
-	m.classList.add('busy');
-	try{sessionStorage.setItem('ys_reopen',JSON.stringify({b:box.scrollTop,l:langs.scrollTop,t:tzs.scrollTop}));}catch(e){}
-	var go=function(){location.reload();};
-	if(!mail)return go();
-	fetch('/api/subscription/prefs',{method:'POST',headers:{'Content-Type':'application/json'},
-		body:JSON.stringify({lang:ck('ys_lang'),tz:ck('ys_tz'),h12:ck('ys_h12')})}).catch(function(){}).then(go);}
+	m.classList.add('busy');reopen();
+	sync(k,v).then(function(){location.reload();});}
 /* ภาษา */
 var lq=document.getElementById('langq'),langs=document.getElementById('langs');
 lq.addEventListener('input',function(){var q=lq.value.trim().toLowerCase(),b=langs.querySelectorAll('.opt');
 	for(var i=0;i<b.length;i++)b[i].style.display=!q||b[i].getAttribute('data-q').indexOf(q)>=0?'':'none';});
-langs.addEventListener('click',function(e){var b=e.target.closest('[data-lang]');if(!b||b.classList.contains('on'))return;apply('ys_lang',b.getAttribute('data-lang'),true);});
+langs.addEventListener('click',function(e){var b=e.target.closest('[data-lang]');if(!b||b.classList.contains('on'))return;apply('ys_lang',b.getAttribute('data-lang'));});
 /* เขตเวลา */
 var tzq=document.getElementById('tzq'),tzs=document.getElementById('tzs'),dev=Intl.DateTimeFormat().resolvedOptions().timeZone||'Asia/Bangkok';
 var cur=tzs.getAttribute('data-cur'),zones=[];
@@ -165,26 +203,63 @@ function renderTz(q){q=q.trim().toLowerCase();var h='';
 	list.slice(0,60).forEach(function(z){h+=item(z,z.replace(/_/g,' '),off(z));});
 	tzs.innerHTML=h||'<div class="empty2">'+S.set_no_match+'</div>';}
 tzq.addEventListener('input',function(){renderTz(tzq.value);});
-tzs.addEventListener('click',function(e){var b=e.target.closest('[data-tz]');if(!b||b.getAttribute('data-tz')===cur)return;apply('ys_tz',b.getAttribute('data-tz'),true);});
+tzs.addEventListener('click',function(e){var b=e.target.closest('[data-tz]');if(!b||b.getAttribute('data-tz')===cur)return;apply('ys_tz',b.getAttribute('data-tz'));});
 /* รูปแบบเวลา และสวิตช์ */
-document.getElementById('clock').addEventListener('click',function(e){var b=e.target.closest('[data-h12]');if(!b||b.classList.contains('on'))return;apply('ys_h12',b.getAttribute('data-h12'),true);});
+document.getElementById('clock').addEventListener('click',function(e){var b=e.target.closest('[data-h12]');if(!b||b.classList.contains('on'))return;apply('ys_h12',b.getAttribute('data-h12'));});
 m.addEventListener('click',function(e){var b=e.target.closest('[data-sw]');if(!b)return;var on=!b.classList.contains('on'),k=b.getAttribute('data-sw');
 	b.classList.toggle('on',on);b.setAttribute('aria-checked',on);
-	if(k==='calm'){document.cookie='ys_calm='+(on?1:0)+y;document.documentElement.classList.toggle('calm',on);}
-	else apply('ys_'+k,on?'1':'0',false);});
+	if(k==='calm'){document.cookie='ys_calm='+(on?1:0)+y;document.documentElement.classList.toggle('calm',on);sync('ys_calm',on?'1':'0');}
+	else if(k==='mail'){b.disabled=true;post('/api/account/subscribe',{on:on}).then(function(r){if(!r.ok)throw 0;})
+		.catch(function(){b.classList.toggle('on',!on);b.setAttribute('aria-checked',!on);}).then(function(){b.disabled=false;});}
+	else apply('ys_'+k,on?'1':'0');});
 /* คืนค่าตามอุปกรณ์ */
 m.querySelector('[data-reset]').addEventListener('click',function(){
 	['ys_lang','ys_tz','ys_h12','ys_refresh','ys_calm'].forEach(function(k){document.cookie=k+'=; path=/; max-age=0';});
-	try{sessionStorage.removeItem('ys_init');sessionStorage.setItem('ys_reopen','{}');}catch(e){}location.reload();});
+	try{sessionStorage.removeItem('ys_init');sessionStorage.setItem('ys_reopen','{}');}catch(e){}
+	m.classList.add('busy');(LOGGED?post('/api/prefs',{reset:true}).catch(function(){}):Promise.resolve()).then(function(){location.reload();});});
+/* ออกจากระบบ */
+var lo=m.querySelector('[data-logout]');
+if(lo)lo.addEventListener('click',function(){m.classList.add('busy');reopen();post('/api/auth/logout').catch(function(){}).then(function(){location.reload();});});
 /* เปิดค้างไว้หลังโหลดหน้าใหม่ */
 try{var ro=!window.__ysReload&&sessionStorage.getItem('ys_reopen');if(ro){sessionStorage.removeItem('ys_reopen');ro=JSON.parse(ro);
 	m.style.transition='none';box.style.transition='none';open();
 	box.scrollTop=ro.b||0;langs.scrollTop=ro.l||0;tzs.scrollTop=ro.t||0;
 	setTimeout(function(){m.style.transition='';box.style.transition='';},50);}}catch(e){}
-var un=m.querySelector('[data-unsub]');
-if(un)un.addEventListener('click',function(){un.disabled=true;
-	fetch('/api/subscription/unsubscribe',{method:'POST'}).then(function(r){var msg=document.getElementById('setmsg');
-		if(msg){msg.textContent=r.ok?S.set_unsub_done:S.sub_error;msg.className='msg '+(r.ok?'ok':'err');}
-		if(r.ok)un.remove();else un.disabled=false;});});
+/* เข้าสู่ระบบด้วยรหัส 6 หลักทางอีเมล */
+var g=document.getElementById('lgm'),f1=document.getElementById('lg1'),f2=document.getElementById('lg2'),em=document.getElementById('lgemail'),
+	cd=document.getElementById('lgcode'),gm=document.getElementById('lgmsg'),rs=g.querySelector('[data-lg-resend]'),ld=document.getElementById('lglead'),
+	email='',wantSub=false,timer=0;
+function say(t,c){gm.textContent=t||'';gm.className='msg '+(c||'');}
+function step(n){f1.hidden=n!==1;f2.hidden=n!==2;say('');setTimeout(function(){(n===1?em:cd).focus();},60);}
+function openLogin(sub){wantSub=!!sub;ld.textContent=ld.getAttribute(sub?'data-sub':'data-plain');close();
+	g.classList.add('open');g.setAttribute('aria-hidden','false');step(email?2:1);}
+function closeLogin(){g.classList.remove('open');g.setAttribute('aria-hidden','true');}
+function subscribe(){if(LOGGED){open();box.scrollTop=1e5;}else openLogin(true);}
+function countdown(sec){clearInterval(timer);var left=sec;
+	var tick=function(){if(left<=0){clearInterval(timer);rs.disabled=false;rs.textContent=S.lg_resend;return;}
+		rs.disabled=true;rs.textContent=S.lg_resend_in.replace('{s}',left);left--;};tick();timer=setInterval(tick,1000);}
+function sendCode(btn){
+	email=em.value.trim();if(!email){say(S.sub_need,'err');return;}
+	if(btn)btn.disabled=true;say(S.sub_sending);
+	post('/api/auth/code',{email:email}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){
+		if(r.ok){step(2);document.getElementById('lgsent').textContent=S.lg_sent.replace('{email}',email);countdown(60);return;}
+		say(j.error||S.sub_error,'err');if(j.wait&&!f2.hidden)countdown(j.wait);});})
+	.catch(function(){say(S.sub_conn,'err');}).then(function(){if(btn)btn.disabled=false;});}
+f1.addEventListener('submit',function(e){e.preventDefault();sendCode(f1.querySelector('.save'));});
+rs.addEventListener('click',function(){sendCode(null);});
+g.querySelector('[data-lg-back]').addEventListener('click',function(){email='';cd.value='';clearInterval(timer);step(1);});
+cd.addEventListener('input',function(){cd.value=cd.value.replace(/\D/g,'').slice(0,6);if(cd.value.length===6)f2.requestSubmit?f2.requestSubmit():f2.dispatchEvent(new Event('submit'));});
+f2.addEventListener('submit',function(e){e.preventDefault();var btn=f2.querySelector('.save');
+	if(cd.value.length!==6){say(S.lg_bad,'err');return;}
+	btn.disabled=true;say(S.sub_sending);
+	post('/api/auth/verify',{email:email,code:cd.value,subscribe:wantSub}).then(function(r){return r.json().catch(function(){return{};}).then(function(j){
+		if(r.ok&&j.ok){try{sessionStorage.setItem('ys_reopen',JSON.stringify({b:1e5}));}catch(e){}location.replace(location.pathname+location.search.replace(/([?&])subscribe=1&?/,'$1').replace(/[?&]$/,''));return;}
+		btn.disabled=false;cd.value='';if(j.expired){email='';clearInterval(timer);step(1);}else cd.focus();say(j.error||S.sub_error,'err');});})
+	.catch(function(){say(S.sub_conn,'err');btn.disabled=false;});});
+document.addEventListener('click',function(e){var t=e.target;if(!t||!t.closest)return;
+	if(t.closest('[data-login-open]')){e.preventDefault();openLogin(false);return;}
+	if(t===g||t.closest('[data-lg-close]'))closeLogin();});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'&&g.classList.contains('open'))closeLogin();});
+if(/[?&]subscribe=1/.test(location.search)&&!window.__ysReload)subscribe();
 })();`;
 }

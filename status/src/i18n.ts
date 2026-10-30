@@ -34,8 +34,8 @@ export type Prefs = {
 	refresh: boolean;
 	/** ลดภาพเคลื่อนไหว */
 	calm: boolean;
-	/** อีเมลที่อุปกรณ์นี้รับแจ้งเตือนอยู่ (จาก cookie ys_sub) */
-	sub?: { email: string } | null;
+	/** ผู้ใช้ที่เข้าสู่ระบบอยู่ (cookie ys_auth) */
+	user?: { email: string; subscribed: boolean } | null;
 };
 export const DEFAULT_PREFS: Prefs = { lang: 'th', tz: 'Asia/Bangkok', h12: false, refresh: true, calm: false };
 

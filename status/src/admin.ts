@@ -240,7 +240,7 @@ const page = (title: string, body: string) => `<!doctype html>
 .gear-fixed{position:fixed;top:16px;right:16px;z-index:5}</style>
 ${firstVisitScript()}</head>
 <body>${body}
-${settingsModal(prefs().sub ?? null)}
+${settingsModal(prefs().user ?? null)}
 <script>${settingsScript()}</script></body></html>`;
 
 const loginPage = (err?: string) => page('เข้าสู่ระบบผู้ดูแล - Yumi Status', `
