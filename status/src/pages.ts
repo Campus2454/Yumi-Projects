@@ -10,12 +10,12 @@ export type Item = { s: StatusData; r: Report; b: Brief };
 export type PageCtx = { banner: Banner | null; maint: Record<string, string> };
 
 const LOGO = 'https://assets.yumistack.net/photos/logo/yumi/001.webp';
-const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
+export const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 const RANGE_LABEL: Record<Range, string> = { '24h': '24 ชม.', '7d': '7 วัน', '30d': '1 เดือน', all: 'ทั้งหมด' };
-const RANGE_LONG: Record<Range, string> = { '24h': '24 ชั่วโมงที่ผ่านมา', '7d': '7 วันที่ผ่านมา', '30d': '30 วันที่ผ่านมา', all: 'ตลอดช่วงที่บันทึกไว้' };
+export const RANGE_LONG: Record<Range, string> = { '24h': '24 ชั่วโมงที่ผ่านมา', '7d': '7 วันที่ผ่านมา', '30d': '30 วันที่ผ่านมา', all: 'ตลอดช่วงที่บันทึกไว้' };
 
-const ICON = {
+export const ICON = {
 	back: '<svg viewBox="0 0 24 24"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>',
 	refresh: '<svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5"/></svg>',
 	ok: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
@@ -170,7 +170,7 @@ document.addEventListener('visibilitychange',function(){if(!document.hidden)refr
 var b=document.getElementById('reload');if(b)b.addEventListener('click',refresh);
 })();`;
 
-const shell = (title: string, left: string, main: string, state: string, embed = false) => `<!doctype html>
+export const shell = (title: string, left: string, main: string, state: string, embed = false) => `<!doctype html>
 <html lang="th"${embed ? ' class="embed"' : ''}>
 <head>
 <meta charset="utf-8" />
@@ -202,14 +202,14 @@ ${UI_BODY}
 </body>
 </html>`;
 
-const brand = `<div class="brand"><img src="${LOGO}" alt="" />Yumi Status</div>`;
+export const brand = `<div class="brand"><img src="${LOGO}" alt="" />Yumi Status</div>`;
 const backBtn = `<a class="btn" href="/" target="_top" aria-label="กลับหน้าแรก">${ICON.back}</a>`;
 
-const rangeBar = (base: string, range: Range) =>
+export const rangeBar = (base: string, range: Range) =>
 	`<nav class="seg" aria-label="ช่วงเวลา">${RANGE_LIST.map(k => `<a href="${base}?range=${k}" class="${k === range ? 'on' : ''}"${k === range ? ' aria-current="true"' : ''}>${RANGE_LABEL[k]}</a>`).join('')}</nav>`;
 
 /** ข้อความ "ครั้งล่าสุดของสถานะตรงข้าม" */
-function lastLine(b: Brief): string {
+export function lastLine(b: Brief): string {
 	if (b.state === 'loading') return '';
 	if (b.state === 'up') {
 		return b.last ? `Downtime ล่าสุด ${fmtDurTh(b.last.duration)} เมื่อ ${fmtDateTh(b.last.start)}` : 'ยังไม่เคยล่มตั้งแต่เริ่มบันทึก';
@@ -281,14 +281,14 @@ ${embed ? '' : `<nav class="links"><a href="/metrics?range=${range}">กรา�
 }
 
 /** กราฟ CPU และ RAM ของบริการ (แสดงเฉพาะบริการที่ส่งค่าเหล่านี้มา) */
-const resourcePanels = (series: SeriesPoint[]) => {
+export const resourcePanels = (series: SeriesPoint[]) => {
 	if (!series.some(p => p.cpu !== null || p.memMb !== null)) return '';
 	return `<section class="panel glass"><h2>CPU (%)</h2>${svgChart([seriesLine(series, 'cpu', 'CPU', COLORS[0])], '%')}</section>
 <section class="panel glass"><h2>หน่วยความจำ RAM (MB)</h2>${svgChart([seriesLine(series, 'memMb', 'RAM', COLORS[2])], ' MB')}</section>`;
 };
 
 /** รายละเอียดของแต่ละช่วงในไทม์ไลน์: สี เวลา ระยะเวลา สาเหตุ และหมายเหตุ */
-const segTip = (g: Report['strip'][number], label: string, k: string) => {
+export const segTip = (g: Report['strip'][number], label: string, k: string) => {
 	const col = k === 'down' ? '#ff5a5f' : k === 'warn' ? '#fbbf24' : k === 'load' ? '#4cc9f0' : '#3ddc97';
 	const lines = [
 		`<div style="color:${col};font-weight:600">● ${esc(label)}${k === 'warn' ? ' (ล่มสั้น)' : ''}</div>`,

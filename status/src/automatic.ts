@@ -7,6 +7,7 @@ import { requestSubscribe, confirmSubscribe, unsubscribe, normalizeEmail, initSu
 import { renderSubscribePage, renderConfirmResult, renderUnsubResult } from './subscribe-page.js';
 import { renderMetricsPage } from './chart.js';
 import { registerAdmin } from './admin.js';
+import { getMusic, musicError, nodeStatusData, renderMusicIndex, renderMusicNode } from './music.js';
 import chalk from 'chalk';
 import { StatusData } from 'global/types';
 import express from 'express';
@@ -31,6 +32,9 @@ async function checkAll() {
 
 		// บันทึก timeline และตัวอย่างค่า (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
 		recordStatus(allS);
+		// ประวัติของแต่ละ node เพลงเก็บแยก (service "music:<NODE>") ไม่ขึ้นในรายการหน้าแรก
+		const m = getMusic();
+		if (m) recordStatus(m.nodes.map(nodeStatusData));
 
 		const maint = await getMaintenance();
 		changedStatus = allS.filter(current => {
@@ -162,6 +166,34 @@ app.all('/subscribe/unsubscribe', wrap(async (req, res) => {
 
 // หน้าผู้ดูแล /admin (ต้องลงทะเบียนก่อน /:name)
 registerAdmin(app, () => allS);
+
+// node เพลง: /music (การ์ดแต่ละ node) และ /music/:node (รายละเอียด) ส่ง 503 เมื่อไม่ทำงาน แต่ยังส่งหน้าเว็บ
+app.get('/api/music', wrap(async (req, res) => {
+	const m = getMusic();
+	if (!m) { res.status(503).json({ error: 'ไม่ได้รับข้อมูลจากระบบเฝ้าดูเพลง', cause: musicError() }); return; }
+	res.status(m.nodes.some(n => n.up) ? 200 : 503).json(m);
+}));
+
+app.get('/music', wrap(async (req, res) => {
+	const range = parseRange(req.query.range);
+	const m = getMusic();
+	const items = await Promise.all((m?.nodes ?? []).map(async n => {
+		const s = nodeStatusData(n);
+		const [r, b] = await Promise.all([getReport(s.name, range), getBrief(s)]);
+		return { n, r, b };
+	}));
+	const agg = allS.find(s => s.name === 'music');
+	res.status(agg?.status === 0 ? 503 : 200).send(renderMusicIndex(agg, items, range, await pageCtx()));
+}));
+
+app.get('/music/:node', wrap(async (req, res) => {
+	const range = parseRange(req.query.range);
+	const n = getMusic()?.nodes.find(x => x.name.toLowerCase() === String(req.params.node).toLowerCase());
+	if (!n) { res.status(getMusic() ? 404 : 503).send(renderNotFound(String(req.params.node))); return; }
+	const s = nodeStatusData(n);
+	const [r, b, series, ctx] = await Promise.all([getReport(s.name, range), getBrief(s), getSeries(s.name, range), pageCtx()]);
+	res.status(n.up ? 200 : 503).send(renderMusicNode(n, r, b, range, series, ctx));
+}));
 
 // ต้องอยู่หลัง /metrics และ /api/* เพื่อไม่ให้ถูกจับเป็นชื่อ service
 app.get(`/:name`, wrap(async (req, res) => {

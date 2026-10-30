@@ -1,7 +1,8 @@
 import 'dotenv/config';
 import { formatDataSize } from 'global/common-functions';
 import { Client, GatewayIntentBits, GuildTextBasedChannel, MessageFlags, ContainerBuilder, TextDisplayBuilder } from 'discord.js';
-import { backend, bot_main, database, frontend_main, getActiveError, getLastError } from './check.js';
+import { backend, bot_main, database, frontend_main, getActiveError, getLastError, music } from './check.js';
+import { getMusic } from './music.js';
 import { getBrief, type Brief } from './history.js';
 import { displayName, fmtDurTh } from './format.js';
 import { sendStatusMail, type MailItem } from './mail.js';
@@ -38,6 +39,12 @@ function body(s: StatusData, b: Brief): string {
 		L.push(row('Uptime ล่าสุด', b.last ? `${fmtDurTh(b.last.duration)} (จนถึง ${ts(b.last.end, 'f')})` : null));
 	}
 
+	if (s.name === 'music') {
+		// รวมเป็นภาพเดียว: บอทเพลงแจ้งรายละเอียดแต่ละ node ในห้องเองอยู่แล้ว
+		const m = getMusic();
+		L.push(row('Node ที่ทำงาน', m ? `${m.up} / ${m.total}` : null));
+		L.push(row('เพลงที่กำลังเล่น', m ? `${m.nodes.reduce((a, n) => a + (n.playingPlayers ?? 0), 0)}` : null));
+	}
 	L.push(row('Ping', typeof s.ping === 'number' ? `${s.ping} ms` : null));
 	if (s.resources?.cpu || s.resources?.memory) {
 		L.push(row('CPU', s.resources?.cpu ? `${s.resources.cpu.percent}%` : null));
@@ -91,6 +98,7 @@ export async function send(to_discord: boolean = true, to_mail: boolean = true, 
 			data?.find(v => v.name == 'database') || await database(),
 			data?.find(v => v.name == 'frontend_main') || await frontend_main(),
 			data?.find(v => v.name == 'backend') || await backend(),
+			data?.find(v => v.name == 'music') || await music(),
 		];
 	} else {
 		list = data ?? [];

@@ -3,6 +3,7 @@ import axios from "axios";
 import mysql from "mysql2/promise";
 import { sendEmailAlert } from "global/backend-functions";
 import https from "https";
+import { refreshMusic } from "./music.js";
 
 const mailText = {
 	default: `สถานะการทำงานของ Yumi`,
@@ -138,8 +139,36 @@ async function guarded(key: string, fn: () => Promise<StatusData>, minIntervalMs
 /* ------------------------------------------------------------------ */
 
 export async function checkAll(send2mail: boolean = true) {
-	return Promise.all([bot_main(send2mail), backend(send2mail), frontend_main(send2mail), database(send2mail)]);
+	return Promise.all([bot_main(send2mail), backend(send2mail), frontend_main(send2mail), database(send2mail), music(send2mail)]);
 };
+
+/** node เพลงทั้งหมดรวมเป็นบริการเดียว: ทำงานถ้ามี node ทำงานอย่างน้อย 1 ตัว (รายละเอียดแต่ละ node อยู่ที่ /music) */
+export function music(send2mail: boolean = true): Promise<StatusData> {
+	return guarded('music', () => _music(send2mail), 5000);
+}
+
+async function _music(send2mail: boolean): Promise<StatusData> {
+	const m = await refreshMusic();
+	// ติดต่อ sidecar ไม่ได้ ไม่ได้แปลว่า node ล่ม: แสดงเป็น "ไม่ทราบสถานะ" แทน
+	if (!m) return { name: 'music', status: -1, ping: undefined, uptime: undefined, startTime: undefined, host: undefined, version: undefined, resources: undefined };
+	const up = m.nodes.filter(n => n.up);
+	if (!up.length) {
+		const why = m.nodes.map(n => `${n.name}: ${n.errorTh || n.error || 'ไม่ทราบสาเหตุ'}`).join(', ');
+		return { ...failed('music', `node เพลงหยุดทำงานทั้งหมด (${why})`, send2mail) };
+	}
+	active.delete('music');
+	const pings = up.map(n => n.pingMs).filter((p): p is number => typeof p === 'number');
+	return {
+		name: 'music',
+		status: 1,
+		ping: pings.length ? Math.min(...pings) : undefined,
+		uptime: undefined,
+		startTime: undefined,
+		host: undefined,
+		version: `${up.length}/${m.nodes.length} node`,
+		resources: undefined,
+	};
+}
 
 export function bot_main(send2mail: boolean = true): Promise<StatusData> {
 	return guarded('bot', () => _bot_main(send2mail));

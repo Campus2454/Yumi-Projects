@@ -6,6 +6,7 @@ const NAMES_TH: Record<string, string> = {
 	backend: 'Backend',
 	frontend_main: 'Website',
 	database: 'Database',
+	music: 'Music Nodes',
 };
 export const displayName = (n: string) => NAMES_TH[n] ?? capitalize(n.split('_').join(' '));
 
