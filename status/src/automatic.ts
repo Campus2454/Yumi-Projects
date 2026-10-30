@@ -171,7 +171,11 @@ registerAdmin(app, () => allS);
 app.get('/api/nodes', wrap(async (req, res) => {
 	const m = getMusic();
 	if (!m) { res.status(503).json({ error: 'ไม่ได้รับข้อมูลจากระบบเฝ้าดูเพลง', cause: musicError() }); return; }
-	res.status(m.nodes.some(n => n.up) ? 200 : 503).json(m);
+	// JSON สาธารณะ: ไม่ส่งช่องที่ตัดทิ้งแล้ว (burner, image, error ดิบ)
+	const nodes = m.nodes.map(({ burner: _b, image: _i, error: _e, ...n }) => ({
+		...n, sources: Object.fromEntries(Object.entries(n.sources).map(([k, v]) => [k, { ok: v.ok, reason: v.errorTh }])),
+	}));
+	res.status(m.nodes.some(n => n.up) ? 200 : 503).json({ ...m, nodes });
 }));
 
 app.get('/nodes', wrap(async (req, res) => {

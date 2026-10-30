@@ -65,13 +65,12 @@ function publicReason(th: string | null, up: boolean): string | null {
 function toPublic(m: MusicSnapshot): MusicSnapshot {
 	return {
 		...m,
-		nodes: m.nodes.map(n => ({
+		nodes: m.nodes.map(({ burner: _b, image: _i, ...n }) => ({
 			...n,
+			burner: null,
+			image: null,
 			error: null,
 			errorTh: n.up ? null : publicReason(n.errorTh, false),
-			image: null,
-			burner: null,
-			lastDown: n.lastDown,
 			sources: Object.fromEntries(Object.entries(n.sources).map(([k, v]) => [k, { ok: v.ok, level: null, error: null, errorTh: v.ok ? null : publicReason(v.errorTh, false) }])),
 		})),
 	};
