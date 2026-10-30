@@ -39,7 +39,7 @@ function body(s: StatusData, b: Brief): string {
 		L.push(row('Uptime ล่าสุด', b.last ? `${fmtDurTh(b.last.duration)} (จนถึง ${ts(b.last.end, 'f')})` : null));
 	}
 
-	if (s.name === 'music') {
+	if (s.name === 'nodes') {
 		// รวมเป็นภาพเดียว: บอทเพลงแจ้งรายละเอียดแต่ละ node ในห้องเองอยู่แล้ว
 		const m = getMusic();
 		L.push(row('Node ที่ทำงาน', m ? `${m.up} / ${m.total}` : null));
@@ -98,7 +98,7 @@ export async function send(to_discord: boolean = true, to_mail: boolean = true, 
 			data?.find(v => v.name == 'database') || await database(),
 			data?.find(v => v.name == 'frontend_main') || await frontend_main(),
 			data?.find(v => v.name == 'backend') || await backend(),
-			data?.find(v => v.name == 'music') || await music(),
+			data?.find(v => v.name == 'nodes') || await music(),
 		];
 	} else {
 		list = data ?? [];

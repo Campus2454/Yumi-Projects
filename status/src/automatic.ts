@@ -32,7 +32,7 @@ async function checkAll() {
 
 		// บันทึก timeline และตัวอย่างค่า (ต้องทำก่อน send เพื่อให้ข้อความแจ้งเตือนมีข้อมูล downtime/uptime ล่าสุดครบ)
 		recordStatus(allS);
-		// ประวัติของแต่ละ node เพลงเก็บแยก (service "music:<NODE>") ไม่ขึ้นในรายการหน้าแรก
+		// ประวัติของแต่ละ node เพลงเก็บแยก (service "nodes:<NODE>") ไม่ขึ้นในรายการหน้าแรก
 		const m = getMusic();
 		if (m) recordStatus(m.nodes.map(nodeStatusData));
 
@@ -167,14 +167,14 @@ app.all('/subscribe/unsubscribe', wrap(async (req, res) => {
 // หน้าผู้ดูแล /admin (ต้องลงทะเบียนก่อน /:name)
 registerAdmin(app, () => allS);
 
-// node เพลง: /music (การ์ดแต่ละ node) และ /music/:node (รายละเอียด) ส่ง 503 เมื่อไม่ทำงาน แต่ยังส่งหน้าเว็บ
-app.get('/api/music', wrap(async (req, res) => {
+// node เพลง: /nodes (การ์ดแต่ละ node) และ /nodes/:node (รายละเอียด) (/music เก็บไว้ให้บอทเพลงในอนาคต) ส่ง 503 เมื่อไม่ทำงาน แต่ยังส่งหน้าเว็บ
+app.get('/api/nodes', wrap(async (req, res) => {
 	const m = getMusic();
 	if (!m) { res.status(503).json({ error: 'ไม่ได้รับข้อมูลจากระบบเฝ้าดูเพลง', cause: musicError() }); return; }
 	res.status(m.nodes.some(n => n.up) ? 200 : 503).json(m);
 }));
 
-app.get('/music', wrap(async (req, res) => {
+app.get('/nodes', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const m = getMusic();
 	const items = await Promise.all((m?.nodes ?? []).map(async n => {
@@ -182,11 +182,11 @@ app.get('/music', wrap(async (req, res) => {
 		const [r, b] = await Promise.all([getReport(s.name, range), getBrief(s)]);
 		return { n, r, b };
 	}));
-	const agg = allS.find(s => s.name === 'music');
+	const agg = allS.find(s => s.name === 'nodes');
 	res.status(agg?.status === 0 ? 503 : 200).send(renderMusicIndex(agg, items, range, await pageCtx()));
 }));
 
-app.get('/music/:node', wrap(async (req, res) => {
+app.get('/nodes/:node', wrap(async (req, res) => {
 	const range = parseRange(req.query.range);
 	const n = getMusic()?.nodes.find(x => x.name.toLowerCase() === String(req.params.node).toLowerCase());
 	if (!n) { res.status(getMusic() ? 404 : 503).send(renderNotFound(String(req.params.node))); return; }

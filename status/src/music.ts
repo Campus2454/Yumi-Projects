@@ -41,11 +41,40 @@ export async function refreshMusic(): Promise<MusicSnapshot | null> {
 	try {
 		const r = await axios.get<MusicSnapshot>(MUSIC_URL, { timeout: 20_000 });
 		if (!r.data || !Array.isArray(r.data.nodes)) throw new Error('ข้อมูลที่ได้รับไม่ถูกต้อง');
-		snap = r.data; snapAt = Date.now(); lastError = null;
+		snap = toPublic(r.data); snapAt = Date.now(); lastError = null;
 	} catch (e) {
 		lastError = axios.isAxiosError(e) ? (e.code ?? e.message) : String(e);
 	}
 	return getMusic();
+}
+
+/* ------------------------------------------------------------------ */
+/*  หน้าเว็บนี้เป็นสาธารณะ: ตัดข้อมูลภายในทิ้งตั้งแต่รับเข้ามา            */
+/*  (บัญชีที่ใช้, image, ข้อความ error ดิบ, วิธีตรวจ) เหลือแค่ข้อความกลาง ๆ */
+/* ------------------------------------------------------------------ */
+const SAFE_REASONS = [
+	{ re: /เชื่อมต่อ node ไม่ได้/, text: 'เชื่อมต่อ node ไม่ได้' },
+	{ re: /ไม่ตอบ/, text: 'node ไม่ตอบสนอง' },
+	{ re: /เพลงค้าง/, text: 'เล่นเพลงไม่ต่อเนื่อง' },
+];
+function publicReason(th: string | null, up: boolean): string | null {
+	if (up && !th) return null;
+	for (const r of SAFE_REASONS) if (th && r.re.test(th)) return r.text;
+	return 'ขัดข้องชั่วคราว';
+}
+function toPublic(m: MusicSnapshot): MusicSnapshot {
+	return {
+		...m,
+		nodes: m.nodes.map(n => ({
+			...n,
+			error: null,
+			errorTh: n.up ? null : publicReason(n.errorTh, false),
+			image: null,
+			burner: null,
+			lastDown: n.lastDown,
+			sources: Object.fromEntries(Object.entries(n.sources).map(([k, v]) => [k, { ok: v.ok, level: null, error: null, errorTh: v.ok ? null : publicReason(v.errorTh, false) }])),
+		})),
+	};
 }
 
 /** ข้อมูลที่ยังไม่เก่าเกินไป หรือ null */
@@ -53,7 +82,7 @@ export const getMusic = (): MusicSnapshot | null => (snap && Date.now() - snapAt
 export const musicError = () => lastError;
 
 /** ชื่อที่ใช้เก็บประวัติของแต่ละ node (แยกจากรายการบริการหลัก) */
-export const nodeKey = (name: string) => `music:${name}`;
+export const nodeKey = (name: string) => `nodes:${name}`;
 export const KIND_LABEL: Record<MusicNode['kind'], string> = { nodelink: 'NodeLink', lavalink: 'Lavalink' };
 
 export function nodeStatusData(n: MusicNode): StatusData {
@@ -112,7 +141,6 @@ const MUSIC_CSS = `<style>
 </style>`;
 
 const SOURCE_TH: Record<string, string> = { youtube: 'YouTube', soundcloud: 'SoundCloud', http: 'ไฟล์เสียงทั่วไป (http)' };
-const LEVEL_TH: Record<string, string> = { voice: 'เล่นจริงในห้องเสียง', soak: 'เล่นจริง (ตัวทดสอบ)', stream: 'ขอ stream', load: 'ค้นหาเพลง' };
 const memText = (m: MusicNode['mem']) => (m && m.used !== null && m.total !== null
 	? `${formatDataSize('byte', m.used, 'short')} / ${formatDataSize('byte', m.total, 'short')}` : null);
 
@@ -125,9 +153,9 @@ const bars = (r: Report) => r.buckets.map(k => {
 }).join('');
 
 const nodeState = (n: MusicNode) => (!n.up ? 'down' : n.sources.youtube && !n.sources.youtube.ok ? 'warn' : 'ok');
-const stateLabel: Record<string, string> = { ok: 'กำลังทำงาน', warn: 'ทำงาน แต่ YouTube ใช้ไม่ได้', down: 'หยุดทำงาน', load: 'ไม่ทราบสถานะ' };
+const stateLabel: Record<string, string> = { ok: 'กำลังทำงาน', warn: 'ทำงาน แต่บางแหล่งเพลงใช้ไม่ได้', down: 'หยุดทำงาน', load: 'ไม่ทราบสถานะ' };
 
-/** หน้ารวม /music: การ์ดของแต่ละ node */
+/** หน้ารวม /nodes: การ์ดของแต่ละ node */
 export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], range: Range, ctx: PageCtx): string {
 	const m = getMusic();
 	const up = items.filter(i => i.n.up).length;
@@ -141,10 +169,9 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 	const players = items.reduce((a, i) => a + (i.n.playingPlayers ?? 0), 0);
 	const cards = items.map(({ n, r }) => {
 		const k = nodeState(n);
-		const yt = n.sources.youtube;
-		const chips = Object.entries(n.sources).map(([src, v]) =>
+				const chips = Object.entries(n.sources).map(([src, v]) =>
 			`<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${esc(SOURCE_TH[src] ?? src)}</span>`).join('');
-		return `<a class="ncard glass" data-state="${k === 'warn' ? 'load' : k}" style="${k === 'warn' ? '--c:var(--warn)' : ''}" href="/music/${encodeURIComponent(n.name)}?range=${range}" translate="no">
+		return `<a class="ncard glass" data-state="${k === 'warn' ? 'load' : k}" style="${k === 'warn' ? '--c:var(--warn)' : ''}" href="/nodes/${encodeURIComponent(n.name)}?range=${range}" translate="no">
 	<div class="nhead"><div><div class="nm">${esc(n.name)}</div><div class="st"><span class="dot"></span>${stateLabel[k]} <span class="kind ${n.kind}">${KIND_LABEL[n.kind]}</span></div></div>
 		<div class="players"><b>${n.up ? (n.playingPlayers ?? 0) : '–'}</b><span>กำลังเล่น${n.up && n.players !== null ? ` / ${n.players} player` : ''}</span></div></div>
 	${n.up ? `<div class="nstats">
@@ -152,7 +179,7 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 		<div><div class="k">CPU</div><div class="v">${n.cpu !== null ? `${n.cpu.toFixed(1)}%` : '–'}</div></div>
 		<div><div class="k">RAM</div><div class="v">${n.mem ? `${n.mem.percent.toFixed(0)}%` : '–'}</div></div></div>`
 		: `<div class="nstats" style="grid-template-columns:1fr"><div><div class="k">สาเหตุ</div><div class="v">${esc(n.errorTh || n.error || 'ไม่ทราบสาเหตุ')}</div></div></div>`}
-	<div class="chips">${chips}${yt && !yt.ok && n.burner === false ? '<span class="chip bad">ยังไม่มีบัญชี burner</span>' : ''}</div>
+	<div class="chips">${chips}</div>
 	<div class="bars">${bars(r)}</div>
 	<div class="nfoot"><span>uptime ${RANGE_LONG[range]}</span><b>${fmtPct(r.stat.pct)}</b></div>
 </a>`;
@@ -164,18 +191,18 @@ ${ctx.banner ? `<div class="banner ${ctx.banner.level}">${esc(ctx.banner.text)}<
 	<div class="hl"><span class="pulse"></span><div><h1>${title}</h1><p>${sub}</p></div></div>
 	<div class="bigpct"><b>${players}</b><span>เพลงที่กำลังเล่นอยู่ตอนนี้</span></div>
 </section>
-<div class="toolbar"><h2 class="tt">Node ทั้งหมด</h2>${rangeBar('/music', range)}</div>
+<div class="toolbar"><h2 class="tt">Node ทั้งหมด</h2>${rangeBar('/nodes', range)}</div>
 ${total ? `<section class="ngrid">${cards}</section>` : '<section class="panel glass"><div class="none">ยังไม่มีข้อมูล node</div></section>'}
 ${s ? '' : ''}`;
 	return shell('Yumi - สถานะ node เพลง', `<a class="btn" href="/" aria-label="กลับหน้าแรก">${ICON.back}</a>${brand}`, main, key);
 }
 
-/** หน้ารายละเอียด /music/:node */
+/** หน้ารายละเอียด /nodes/:node */
 export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range, series: SeriesPoint[], ctx: PageCtx): string {
 	const now = Date.now();
 	const k = nodeState(n);
 	const stKey = k === 'ok' ? 'ok' : k === 'down' ? 'down' : 'load';
-	const base = `/music/${encodeURIComponent(n.name)}`;
+	const base = `/nodes/${encodeURIComponent(n.name)}`;
 
 	const clock = b.since !== null && b.ms !== null
 		? `<div class="k">${b.state === 'up' ? 'Uptime' : 'Downtime'}</div><div class="big" data-since="${b.since}">${fmtDurTh(b.ms)}</div><div class="last">${lastLine(b)}</div>`
@@ -193,7 +220,7 @@ export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range,
 
 	const srcRows = Object.entries(n.sources).map(([src, v]) => `<div class="srow">
 	<div class="sn">${esc(SOURCE_TH[src] ?? src)}</div>
-	<div class="sd">${v.ok ? 'ใช้งานได้' : esc(v.errorTh || 'ใช้งานไม่ได้')}${v.level ? ` <span style="color:var(--dim)">• ตรวจแบบ${esc(LEVEL_TH[v.level] ?? v.level)}</span>` : ''}${!v.ok && v.error ? `<small>${esc(v.error.slice(0, 240))}</small>` : ''}</div>
+	<div class="sd">${v.ok ? 'ใช้งานได้' : esc(v.errorTh || 'ใช้งานไม่ได้')}</div>
 	<span class="chip ${v.ok ? 'ok' : 'bad'}"><i></i>${v.ok ? 'ปกติ' : 'ขัดข้อง'}</span></div>`).join('')
 		|| '<div class="none">ยังไม่มีผลตรวจแหล่งเพลง</div>';
 
@@ -201,11 +228,9 @@ export function renderMusicNode(n: MusicNode, r: Report, b: Brief, range: Range,
 	const info = [
 		kv('ชนิด', KIND_LABEL[n.kind]),
 		kv('เวอร์ชัน', n.version),
-		kv('Image', n.image),
 		kv('เริ่ม container', n.startedAt ? fmtDateTh(n.startedAt) : null),
 		kv('Node uptime', n.nodeUptimeMs !== null ? fmtDurTh(n.nodeUptimeMs) : null),
 		kv('Container restart', n.restarts !== null ? `${n.restarts} ครั้ง` : null),
-		kv('บัญชี burner (YouTube)', n.burner === null ? null : n.burner ? 'มี' : 'ยังไม่มี'),
 		kv('YouTube ใช้ได้ 24 ชม.', n.history24.youtube),
 		kv('Node ทำงาน 24 ชม.', n.history24.uptime),
 		kv('ล่มล่าสุด', n.lastDown ? `${fmtDurTh(n.lastDown.end - n.lastDown.start)} (${fmtDateTh(n.lastDown.end)})` : 'ยังไม่เคยล่ม'),
@@ -251,5 +276,5 @@ ${!n.up ? `<div class="warnbox">node นี้หยุดทำงาน เพ
 ${resourcePanels(series)}
 <section class="panel glass"><h2>ประวัติ downtime</h2>${incidents}</section>`;
 
-	return shell(`Yumi - ${esc(n.name)}`, `<a class="btn" href="/music?range=${range}" aria-label="กลับหน้ารวม node">${ICON.back}</a>${brand}`, main, stKey);
+	return shell(`Yumi - ${esc(n.name)}`, `<a class="btn" href="/nodes?range=${range}" aria-label="กลับหน้ารวม node">${ICON.back}</a>${brand}`, main, stKey);
 }
