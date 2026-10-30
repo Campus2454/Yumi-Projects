@@ -145,6 +145,28 @@ export default class KazagumoManager {
         finally{ p.recovering = false; };
         return;
       }
+      // Second voice start timeout: the song is still fine, the voice session on this node is not.
+      // Move the player to another node and play the same song there (no other version).
+      if(/playerStateChange timed out|Voice playback state timed out/i.test(error) && !(track as { nodeRetry?: boolean }).nodeRetry){
+        (track as { nodeRetry?: boolean }).nodeRetry = true;
+        const sp = p.shoukaku;
+        const from = sp.node.name;
+        const others = new Map([...kazagumo.shoukaku.nodes].filter(([n]) => n !== from));
+        const target = kazagumo.shoukaku.options.nodeResolver(others);
+        if(target){
+          p.recovering = true;
+          try{
+            const raw = (track.getRaw() as { _raw?: Track })._raw;
+            const ported = raw ? await portTrack(kazagumo, raw, target as unknown as Node) : null;
+            await sp.node.rest.destroyPlayer(p.guildId).catch(()=>{});
+            sp.node = target;
+            await sp.update({ ...sp.data.playerOptions, track: { encoded: ported?.encoded ?? sp.track ?? raw?.encoded ?? null }, position: 0 });
+            console.warn(headKE, `Voice start timeout again in ${chalk.bold(p.guildId)}, moved ${track.title} from ${from} to ${target.name}`);
+          }catch(err){ console.error(headKE, 'Node retry error:', (err as Error).message); }
+          finally{ p.recovering = false; };
+          return;
+        }
+      }
       recordPlayback(track.sourceName, error);
       // One retry per song, on a different source.
       if((track as { altRetry?: boolean }).altRetry)return;

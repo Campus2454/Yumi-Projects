@@ -290,7 +290,10 @@ export async function createMusicCard(data:{
   const canvas = createCanvas(800,250)
   const ctx = canvas.getContext("2d")
 
+  // Some artwork comes in formats node-canvas cannot read ("Unsupported image type", e.g. AVIF):
+  // fall back to the default cover instead of failing the whole card.
   const img = await loadImage(data.track?.thumbnail || "./src/utils/default.png")
+    .catch(() => loadImage("./src/utils/default.png"))
 
   // background cover + blur
   ;(ctx as any).filter = "blur(30px)"
