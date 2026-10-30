@@ -4,6 +4,7 @@ import mysql from "mysql2/promise";
 import { sendEmailAlert } from "global/backend-functions";
 import https from "https";
 import { reasonText, refreshMusic } from "./music.js";
+import { HOST_MEM, hostResources, memOfHost } from "./host.js";
 
 const mailText = {
 	default: `สถานะการทำงานของ Yumi`,
@@ -158,15 +159,20 @@ async function _music(send2mail: boolean): Promise<StatusData> {
 	}
 	active.delete('nodes');
 	const pings = up.map(n => n.pingMs).filter((p): p is number => typeof p === 'number');
+	// รวมทุก node ที่ทำงานอยู่: CPU และ RAM บวกกัน (เทียบทั้งเครื่องแล้ว), ping เฉลี่ย
+	const withRes = up.filter(n => n.cpu !== null && n.mem && n.mem.used !== null);
+	const memUsed = withRes.reduce((a, n) => a + (n.mem!.used ?? 0), 0);
 	return {
 		name: 'nodes',
 		status: 1,
-		ping: pings.length ? Math.min(...pings) : undefined,
+		ping: pings.length ? Math.round(pings.reduce((a, b) => a + b, 0) / pings.length) : undefined,
 		uptime: undefined,
 		startTime: undefined,
 		host: undefined,
 		version: `${up.length}/${m.nodes.length} node`,
-		resources: undefined,
+		resources: withRes.length
+			? { cpu: { percent: Math.round(withRes.reduce((a, n) => a + (n.cpu ?? 0), 0) * 100) / 100 }, memory: { percent: memOfHost(memUsed), used: memUsed, total: HOST_MEM } }
+			: undefined,
 	};
 }
 
@@ -197,7 +203,7 @@ async function _bot_main(send2mail: boolean): Promise<StatusData> {
 			startTime: loadData.startTime,
 			host: loadData.host,
 			version: loadData.version,
-			resources: loadData.resources
+			resources: hostResources(loadData.resources)
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;
@@ -242,7 +248,7 @@ async function _backend(send2mail: boolean): Promise<StatusData> {
 			startTime: loadData.startTime,
 			host: loadData.host,
 			version: loadData.version,
-			resources: loadData.resources
+			resources: hostResources(loadData.resources)
 		};
 	}catch(err){
 		const rl = asRateLimit(err); if(rl) throw rl;

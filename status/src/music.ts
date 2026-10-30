@@ -7,6 +7,7 @@ import { fmtDateTh, fmtDayTh, fmtDurTh, fmtPct } from './format.js';
 import { ICON, RANGE_LONG, backBtn, brand, esc, lastLine, pageLinks, rangeBar, resourcePanels, segTip, shell, type PageCtx } from './pages.js';
 import { t, type Key } from './i18n.js';
 import { STRINGS } from './strings.js';
+import { HOST_MEM, cpuOfHost, memOfHost } from './host.js';
 
 /* ------------------------------------------------------------------ */
 /*  ข้อมูล node เพลง (Lavalink / NodeLink)                               */
@@ -75,6 +76,9 @@ function toPublic(m: MusicSnapshot): MusicSnapshot {
 			image: null,
 			error: null,
 			errorTh: n.up ? null : publicReason(n.errorTh, false),
+			// sidecar ส่ง CPU เป็น % ของ 1 core และ RAM เทียบ limit ของ container: แปลงเป็นเทียบทั้งเครื่อง เหมือน service อื่น
+			cpu: n.cpu !== null ? cpuOfHost(n.cpu) : null,
+			mem: n.mem && n.mem.used !== null ? { used: n.mem.used, total: HOST_MEM, percent: memOfHost(n.mem.used) } : n.mem,
 			sources: Object.fromEntries(Object.entries(n.sources).map(([k, v]) => [k, { ok: v.ok, level: null, error: null, errorTh: v.ok ? null : publicReason(v.errorTh, false) }])),
 		})),
 	};
@@ -180,8 +184,8 @@ export function renderMusicIndex(s: StatusData | undefined, items: NodeItem[], r
 		<div class="players"><b>${n.up ? (n.playingPlayers ?? 0) : '–'}</b><span>${t('node_playing')}${n.up && n.players !== null ? ` / ${t('node_players', { n: n.players })}` : ''}</span></div></div>
 	${n.up ? `<div class="nstats">
 		<div><div class="k">Ping</div><div class="v">${n.pingMs ?? '–'} ms</div></div>
-		<div><div class="k">CPU</div><div class="v">${n.cpu !== null ? `${n.cpu.toFixed(1)}%` : '–'}</div></div>
-		<div><div class="k">RAM</div><div class="v">${n.mem ? `${n.mem.percent.toFixed(0)}%` : '–'}</div></div></div>`
+		<div><div class="k">CPU</div><div class="v">${n.cpu !== null ? `${n.cpu.toFixed(2)}%` : '–'}</div></div>
+		<div><div class="k">RAM</div><div class="v">${n.mem ? `${n.mem.percent.toFixed(1)}%` : '–'}</div></div></div>`
 		: `<div class="nstats" style="grid-template-columns:1fr"><div><div class="k">${t('node_cause')}</div><div class="v">${esc(reasonText(n.errorTh))}</div></div></div>`}
 	<div class="chips">${chips}</div>
 	<div class="bars">${bars(r)}</div>

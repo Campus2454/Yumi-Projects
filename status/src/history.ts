@@ -1,6 +1,7 @@
 import pg from 'pg';
 import type { StatusData } from 'global/types';
 import { getActiveError } from './check.js';
+import { HOST_CORES, HOST_MEM } from './host.js';
 
 /**
  * ประวัติสถานะเก็บใน PostgreSQL (DATABASE_URL)
@@ -97,12 +98,35 @@ export function initHistory(): Promise<void> {
 					updated_at BIGINT NOT NULL
 				);
 			`);
+			await migrateHostBasis();
 			// ช่วงที่ค้างเปิดอยู่ตอนโปรแกรมดับ ให้ปิดที่เวลาที่เห็นล่าสุด (ไม่นับเป็น downtime)
 			await pool.query(`UPDATE segments SET ended_at = last_seen WHERE ended_at IS NULL`);
 		})();
 		ready.catch(() => { ready = null; }); // ลองใหม่ได้ถ้าเชื่อมต่อไม่สำเร็จ
 	}
 	return ready;
+}
+
+/**
+ * ครั้งเดียว: ตัวอย่างเก่าเก็บ CPU เป็น % ของ 1 core (bot, backend, node เพลง) และ RAM ของ node เทียบ limit ของ container
+ * แปลงให้เทียบทั้งเครื่องเหมือนค่าที่บันทึกตั้งแต่นี้ไป กราฟเก่ากับใหม่จะได้ต่อกันได้
+ */
+async function migrateHostBasis() {
+	const client = await pool.connect();
+	try {
+		await client.query('BEGIN');
+		const done = await client.query(`INSERT INTO settings(key, value, updated_at) VALUES ('migr_host_basis', 'true', $1) ON CONFLICT (key) DO NOTHING`, [Date.now()]);
+		if (done.rowCount) {
+			await client.query(`UPDATE samples SET cpu = ROUND((cpu / $1::real)::numeric, 2) WHERE cpu IS NOT NULL AND (service IN ('bot', 'backend') OR service LIKE 'nodes:%')`, [HOST_CORES]);
+			await client.query(`UPDATE samples SET mem_total = $1::bigint, mem_percent = ROUND((mem_used * 100.0 / $1::bigint)::numeric, 2) WHERE mem_used IS NOT NULL AND (service IN ('bot', 'backend') OR service LIKE 'nodes:%')`, [HOST_MEM]);
+		}
+		await client.query('COMMIT');
+	} catch (e) {
+		await client.query('ROLLBACK').catch(() => {});
+		throw e;
+	} finally {
+		client.release();
+	}
 }
 
 /* ---------- การตั้งค่าที่แอดมินแก้ได้ ---------- */
@@ -296,7 +320,7 @@ export async function getSeries(service: string, range: Range = '24h', now = Dat
 		const r = byK.get(k);
 		out.push({
 			ts: from + k * size + size / 2,
-			cpu: r ? r1(r.cpu) : null,
+			cpu: r && r.cpu != null ? Math.round(r.cpu * 100) / 100 : null,
 			memMb: r && r.mem != null ? r1(r.mem / 1048576) : null,
 			ping: r && r.ping != null ? Math.round(r.ping) : null,
 			uptimeH: r && r.up != null ? r1(r.up / 3600) : null,

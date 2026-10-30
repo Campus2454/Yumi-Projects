@@ -22,7 +22,7 @@ const port = isDev ? 30006 : 3006;
 const app = express();
 
 /** service ที่มีกราฟ */
-const METRIC_SERVICES = ['bot', 'backend', 'frontend_main', 'database'];
+const METRIC_SERVICES = ['bot', 'backend', 'frontend_main', 'database', 'nodes'];
 
 /** ประกาศและโหมดปรับปรุงที่แอดมินตั้งไว้ ส่งให้หน้าเว็บแสดงผล */
 const pageCtx = async () => ({ banner: await getBanner(), maint: await getMaintenance() });

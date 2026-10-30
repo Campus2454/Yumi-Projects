@@ -4,7 +4,7 @@ import { displayName, fmtDateTh } from './format.js';
 import { localeOf, prefs, t } from './i18n.js';
 
 const W = 720, H = 210, PL = 56, PR = 14, PT = 14, PB = 28;
-export const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24'];
+export const COLORS = ['#ff5a5f', '#3ddc97', '#4cc9f0', '#fbbf24', '#b388ff'];
 const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 export type Line = { name: string; color: string; points: { ts: number; v: number | null }[] };
@@ -84,7 +84,8 @@ export function svgChart(lines: Line[], unit: string): string {
 		lines: live.map(l => ({ name: l.name, color: l.color, v: l.points.map(p => p.v) })),
 	};
 
-	const f1 = (v: number) => String(Math.round(v * 10) / 10);
+	// ค่าน้อยกว่า 1 (เช่น CPU 0.03%) แสดง 2 ตำแหน่ง ไม่ให้ปัดเป็น 0
+	const f1 = (v: number) => String(Math.abs(v) < 1 ? Math.round(v * 100) / 100 : Math.round(v * 10) / 10);
 	const legend = live.map(l => {
 		const vs = l.points.map(p => p.v).filter((v): v is number => v !== null);
 		const mn = Math.min(...vs), mx = Math.max(...vs), av = vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -141,7 +142,7 @@ function resetCh(c){
 	var dots=svg.querySelectorAll('circle.pt');
 	for(var i=0;i<dots.length;i++)dots[i].style.display='none';
 }
-function fmtVal(v){return String(Math.round(v*10)/10);}
+function fmtVal(v){return String(Math.abs(v)<1?Math.round(v*100)/100:Math.round(v*10)/10);}
 function chartAt(c,e){
 	var d=c._d||(c._d=JSON.parse(c.getAttribute('data-chart')));
 	var svg=c.querySelector('svg'),r=svg.getBoundingClientRect();
