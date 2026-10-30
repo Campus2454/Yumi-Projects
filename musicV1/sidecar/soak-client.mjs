@@ -25,7 +25,9 @@ const STATUS = fileURLToPath(new URL('soak-status.json', import.meta.url));
 const status = (() => { try { return JSON.parse(readFileSync(STATUS, 'utf8')); } catch { return {}; } })();
 const sourceKey = (s) => (s?.startsWith('youtube') || s === 'ytmusic' ? 'youtube' : s || 'unknown');
 // Discord voice problems belong to the test client, not to the song's source.
-const VOICE_ERROR = /voice connection|UDP|session is no longer valid|4006/i;
+// playerStateChange timeouts: the same songs play fine in voiceprobe, only right after the soak
+// rejoins on another node, so they are a voice handshake issue of this client, not of the source.
+const VOICE_ERROR = /voice connection|UDP|session is no longer valid|4006|playerStateChange timed out|Voice playback state timed out/i;
 function report(node, source, ok, error, title) {
   const key = !ok && VOICE_ERROR.test(error || '') ? 'voice' : sourceKey(source);
   (status[node] ??= {})[key] = { ok, error: error?.split('\n')[0].slice(0, 300), title, at: new Date().toISOString() };
