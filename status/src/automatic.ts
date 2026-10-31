@@ -16,6 +16,8 @@ import express from 'express';
 
 let allS: StatusData[] = [];
 let prevS: StatusData[] = [];
+/** สถานะล่าสุด (ทำงาน/หยุด) ที่รู้แน่ของแต่ละ service ไว้ตัดสินว่าจะส่งอีเมลไหม */
+const mailState = new Map<string, number>();
 let changedStatus: StatusData[] = [];
 const isDev = process.env.IS_DEV === 'true';
 const port = isDev ? 30006 : 3006;
@@ -46,8 +48,20 @@ async function checkAll() {
 		});
 		console.log(changedStatus);
 
+		// Discord: ทุกการเปลี่ยนสถานะ (รวมตอนเริ่มโปรแกรม) เหมือนเดิม
 		if(changedStatus.length > 0){
-			await send(true, true, false, changedStatus);
+			await send(true, false, false, changedStatus);
+		};
+		// อีเมล: เฉพาะ service ที่สลับระหว่างทำงาน <-> หยุดทำงาน จริง
+		// ไม่ส่งตอนเริ่มโปรแกรม และไม่นับสถานะ "ไม่ทราบ/กำลังเริ่ม" (-1) ระหว่างทาง
+		const mailChanged = allS.filter(current => {
+			if (current.status !== 0 && current.status !== 1) return false;
+			const before = mailState.get(current.name);
+			mailState.set(current.name, current.status);
+			return before !== undefined && before !== current.status && !(current.name in maint);
+		});
+		if(mailChanged.length > 0){
+			await send(false, true, false, mailChanged);
 		};
 
 		if(allS.some(s => s.status === 0))throw new Error('Some service down');
@@ -294,4 +308,5 @@ initHistory()
 		process.exit(1);
 	});
 
-cron.schedule('0 12 * * *', () => send());
+// รายงานประจำวัน 19:00 น. (เวลาไทย) ส่งเฉพาะ Discord ไม่ส่งอีเมล
+cron.schedule('0 12 * * *', () => send(true, false));
